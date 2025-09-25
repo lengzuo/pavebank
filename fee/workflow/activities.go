@@ -49,7 +49,11 @@ func (a *Activities) CloseBill(ctx context.Context, billID string) error {
 	// Update the bill status
 	err := dao.CloseBill(ctx, billID)
 	// TODO: Generate PDF invoice using html2pdf
+	err = a.GeneratePDFInvoive(ctx, billID)
+	// TODO: Create payment link
+	err = a.CreatePaymentLink(ctx, billID)
 	// TODO: Email the PDF to client using sendgrid.
+	err = a.SendBillEmail(ctx, billID)
 	return err
 }
 
@@ -92,6 +96,12 @@ func (a *Activities) GeneratePDFInvoive(ctx context.Context, billID string) erro
 func (a *Activities) SendBillEmail(ctx context.Context, billID string) error {
 	// TODO: Implement email sending logic
 	return nil
+}
+
+// CurrencyConversion used to convert USD → GEL
+func (a *Activities) CurrencyConversion(ctx context.Context, billID string, targetCurrency string) (int64, error) {
+	// TODO: Implement payment link creation logic
+	return 0, nil
 }
 
 func (a *Activities) CreatePaymentLink(ctx context.Context, billID string) error {

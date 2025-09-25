@@ -13,23 +13,30 @@ import (
 )
 
 type AddLineItemParams struct {
-	Amount         int64                   `json:"amount"`
-	Currency       string                  `json:"currency"`
-	Metadata       *model.LineItemMetadata `json:"metadata,omitempty"`
-	IdempotencyKey string                  `header:"X-Idempotency-Key"`
+	Amount         int64  `json:"amount"`
+	Currency       string `json:"currency"`
+	Description    string `json:"description"`
+	IdempotencyKey string `header:"X-Idempotency-Key"`
+}
+
+type AddLineItemResponse struct {
+	Amount      int64  `json:"amount"`
+	Currency    string `json:"currency"`
+	BillID      string `json:"bill_id"`
+	Description string `json:"description"`
 }
 
 //encore:api public method=POST path=/bills/:billID/line-items tag:idempotency
-func (s *Service) AddLineItem(ctx context.Context, billID string, params *AddLineItemParams) error {
+func (s *Service) AddLineItem(ctx context.Context, billID string, params *AddLineItemParams) (*AddLineItemResponse, error) {
 	if params.Amount <= 0 {
-		return &errs.Error{
+		return nil, &errs.Error{
 			Code:    errs.InvalidArgument,
 			Message: "amount must be positive",
 		}
 	}
 	currency, err := model.ToCurrency(params.Currency)
 	if err != nil {
-		return &errs.Error{
+		return nil, &errs.Error{
 			Code:    errs.InvalidArgument,
 			Message: "invalid currency",
 		}
@@ -38,21 +45,28 @@ func (s *Service) AddLineItem(ctx context.Context, billID string, params *AddLin
 		Amount:   params.Amount,
 		Currency: currency,
 		BillID:   billID,
-		Metadata: params.Metadata,
 	}
-
-	err = s.client.SignalWorkflow(ctx, "bill-"+billID, "", temporal.AddLineItemSignal, signal)
+	if params.Description != "" {
+		signal.Metadata = &model.LineItemMetadata{Description: params.Description}
+	}
+	workflowID := "bill-" + billID
+	err = s.client.SignalWorkflow(ctx, workflowID, "", temporal.AddLineItemSignal, signal)
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) || errors.Is(err, sql.ErrNoRows) {
-			return &errs.Error{
+			return nil, &errs.Error{
 				Code:    errs.NotFound,
 				Message: "bill not found or already closed",
 			}
 		}
 		rlog.Error("failed to signal add line item workflow", "error", err)
-		return err
+		return nil, err
 	}
 
-	return nil
+	return &AddLineItemResponse{
+		Amount:      params.Amount,
+		Currency:    params.Currency,
+		BillID:      billID,
+		Description: params.Description,
+	}, nil
 }
