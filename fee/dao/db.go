@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strconv"
 	"time"
 
 	"encoding/json" // Import for JSON unmarshaling
@@ -122,7 +121,7 @@ func CloseBill(ctx context.Context, billID string) error {
 func GetBill(ctx context.Context, billID string) (*model.Bill, error) {
 	var bill model.Bill
 	err := db.QueryRow(ctx, `
-		SELECT status, poliyc_type, closed_at, created_at, updated_at
+		SELECT status, policy_type, closed_at, created_at, updated_at
 		FROM bills
 		WHERE bill_id = $1
 	`, billID).Scan(&bill.Status, &bill.PolicyType, &bill.ClosedAt, &bill.CreatedAt, &bill.UpdatedAt)
@@ -198,18 +197,10 @@ func GetBills(ctx context.Context, status model.BillStatus, limit int, cursor ti
 	query := `
 		SELECT bill_id, status, policy_type, created_at, metadata, closed_at
 		FROM bills
-		WHERE status = $1
+		WHERE created_at < $1 AND status = $2 
+		ORDER BY created_at DESC LIMIT $3
 	`
-	args := []interface{}{status}
-
-	if !cursor.IsZero() {
-		query += " AND created_at < $2"
-		args = append(args, cursor)
-	}
-
-	query += " ORDER BY created_at DESC LIMIT $" + strconv.Itoa(len(args)+1)
-	args = append(args, limit+1)
-
+	args := []interface{}{cursor, status, limit + 1}
 	rows, err := db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, false, err
@@ -237,4 +228,36 @@ func GetBills(ctx context.Context, status model.BillStatus, limit int, cursor ti
 	}
 
 	return bills, hasMore, nil
+}
+
+// GetBillIDs retrieves a bill id from status policy type
+func GetBillIDs(ctx context.Context, status model.BillStatus, policyType model.PolicyType, limit int, cursor time.Time) ([]string, bool, error) {
+	query := `
+		SELECT bill_id
+		FROM bills
+		WHERE created_at < $1 AND status = $2 AND policy_type = $3
+		ORDER BY created_at DESC LIMIT $4
+	`
+	args := []interface{}{cursor, status, policyType, limit + 1}
+	rows, err := db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+
+	var billIDs []string
+	for rows.Next() {
+		var billID string
+		if err := rows.Scan(&billID); err != nil {
+			return nil, false, err
+		}
+		billIDs = append(billIDs, billID)
+	}
+
+	hasMore := len(billIDs) > limit
+	if hasMore {
+		billIDs = billIDs[:limit]
+	}
+
+	return billIDs, hasMore, nil
 }

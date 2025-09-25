@@ -51,7 +51,7 @@ func (s *Service) GetBills(ctx context.Context, params *GetBillsParams) (*GetBil
 		params.Limit = 10
 	}
 
-	var cursor time.Time
+	cursor := time.Now()
 	if params.Cursor != "" {
 		var err error
 		cursor, err = time.Parse(time.RFC3339, params.Cursor)

@@ -41,6 +41,10 @@ func (a *Activities) AddLineItem(ctx context.Context, billID, currency string, a
 	return nil
 }
 
+func (a *Activities) CreateBill(ctx context.Context, billID string, policyType model.PolicyType) error {
+	return dao.CreateBill(ctx, billID, string(policyType))
+}
+
 func (a *Activities) CloseBill(ctx context.Context, billID string) error {
 	// Update the bill status
 	err := dao.CloseBill(ctx, billID)
@@ -78,6 +82,21 @@ func (a *Activities) GetBillSummary(ctx context.Context, billID string) (*model.
 	billSummary.TotalCharges = totalCharges
 
 	return &billSummary, nil
+}
+
+func (a *Activities) GeneratePDFInvoive(ctx context.Context, billID string) error {
+	// TODO: Implement generate PDF invoice
+	return nil
+}
+
+func (a *Activities) SendBillEmail(ctx context.Context, billID string) error {
+	// TODO: Implement email sending logic
+	return nil
+}
+
+func (a *Activities) CreatePaymentLink(ctx context.Context, billID string) error {
+	// TODO: Implement payment link creation logic
+	return nil
 }
 
 func ComposeGreeting(ctx context.Context, name string) (string, error) {

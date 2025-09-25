@@ -51,9 +51,15 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 			NonRetryableErrorTypes: []string{billNotFound, billClosed},
 		},
 	}
-	rlog.Debug("BillLifecycleWorkflow workflow", "id", req)
 	ctx = workflow.WithActivityOptions(ctx, ao)
 	var activities *Activities
+
+	// 1. Create bill entry in the database first
+	err := workflow.ExecuteActivity(ctx, activities.CreateBill, req.BillID, req.PolicyType).Get(ctx, nil)
+	if err != nil {
+		rlog.Error("failed to create bill in database", "error", err, "bill_id", req.BillID)
+		return nil, err
+	}
 
 	signalChan := workflow.GetSignalChannel(ctx, AddLineItemSignal)
 	closeChan := workflow.GetSignalChannel(ctx, CloseBillSignal)
@@ -63,23 +69,13 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 	for !workflowCompleted {
 		selector := workflow.NewSelector(ctx)
 
-		switch req.PolicyType {
-		case model.PolicyTypeUsageBased:
-			selector.AddReceive(signalChan, func(c workflow.ReceiveChannel, more bool) {
-				var signal AddLineItemSignalRequest
-				c.Receive(ctx, &signal)
-				rlog.Info("getting add line item signal")
-				workflow.ExecuteActivity(ctx, activities.AddLineItem, signal.BillID, signal.Currency, signal.Amount, signal.Metadata).Get(ctx, nil)
-				rlog.Debug("add line item completed ", signal.Amount)
-			})
-		case model.PolicyTypeHourly:
-			// Automaitcally collect bill every hours from a separate servcies.
-			// Mock the amount and currency for this assignment
-			selector.AddFuture(workflow.NewTimer(ctx, time.Hour), func(f workflow.Future) {
-				workflow.ExecuteActivity(ctx, activities.AddLineItem, req.BillID, "USD", 100, nil).Get(ctx, nil)
-				rlog.Debug("hourly job add line item completed")
-			})
-		}
+		selector.AddReceive(signalChan, func(c workflow.ReceiveChannel, more bool) {
+			var signal AddLineItemSignalRequest
+			c.Receive(ctx, &signal)
+			rlog.Info("getting add line item signal")
+			workflow.ExecuteActivity(ctx, activities.AddLineItem, signal.BillID, signal.Currency, signal.Amount, signal.Metadata).Get(ctx, nil)
+			rlog.Debug("add line item completed ", signal.Amount)
+		})
 
 		selector.AddReceive(closeChan, func(c workflow.ReceiveChannel, more bool) {
 			var signal ClosedBillRequest
@@ -95,7 +91,7 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 	// After the loop, update the bill status to be returned
 	// This activity call is crucial to get the final state of the bill for the return value
 	var billSummary model.BillSummary
-	err := workflow.ExecuteActivity(ctx, activities.GetBillSummary, req.BillID).Get(ctx, &billSummary)
+	err = workflow.ExecuteActivity(ctx, activities.GetBillSummary, req.BillID).Get(ctx, &billSummary)
 	if err != nil {
 		return nil, err
 	}

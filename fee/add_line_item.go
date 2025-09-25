@@ -22,11 +22,17 @@ type AddLineItemParams struct {
 //encore:api public method=POST path=/bills/:billID/line-items tag:idempotency
 func (s *Service) AddLineItem(ctx context.Context, billID string, params *AddLineItemParams) error {
 	if params.Amount <= 0 {
-		return errors.New("amount must be positive")
+		return &errs.Error{
+			Code:    errs.InvalidArgument,
+			Message: "amount must be positive",
+		}
 	}
 	currency, err := model.ToCurrency(params.Currency)
 	if err != nil {
-		return errors.New("invalid currency")
+		return &errs.Error{
+			Code:    errs.InvalidArgument,
+			Message: "invalid currency",
+		}
 	}
 	signal := temporal.AddLineItemSignalRequest{
 		Amount:   params.Amount,

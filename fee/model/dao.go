@@ -57,15 +57,15 @@ type PolicyType string
 
 const (
 	PolicyTypeUsageBased PolicyType = "USAGE_BASED"
-	PolicyTypeHourly     PolicyType = "HOURLY"
+	PolicyTypeMonthly    PolicyType = "MONTHLY"
 )
 
 func ToPolicyType(s string) (PolicyType, error) {
 	switch PolicyType(s) {
 	case PolicyTypeUsageBased:
 		return PolicyTypeUsageBased, nil
-	case PolicyTypeHourly:
-		return PolicyTypeHourly, nil
+	case PolicyTypeMonthly:
+		return PolicyTypeMonthly, nil
 	default:
 		return "", fmt.Errorf("invalid PolicyType: %s", s)
 	}
