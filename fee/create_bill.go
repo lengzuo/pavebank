@@ -3,6 +3,7 @@ package fee
 import (
 	"context"
 	"errors"
+	"time"
 
 	"encore.app/fee/model"
 	temporal "encore.app/fee/workflow"
@@ -12,9 +13,10 @@ import (
 )
 
 type CreateBillParams struct {
-	BillID         string `json:"bill_id"`
-	FeePolicyType  string `json:"fee_policy_type"`
-	IdempotencyKey string `header:"X-Idempotency-Key"`
+	BillID           string    `json:"bill_id"`
+	FeePolicyType    string    `json:"fee_policy_type"`
+	BillingPeriodEnd time.Time `json:"billing_period_end"` // eg: 2025-09-25T21:25:00+08:00
+	IdempotencyKey   string    `header:"X-Idempotency-Key"`
 }
 
 type CreateBillResponse struct {
@@ -33,9 +35,17 @@ func (s *Service) CreateBill(ctx context.Context, params *CreateBillParams) (*Cr
 		}
 	}
 
+	if params.BillingPeriodEnd.IsZero() {
+		return nil, &errs.Error{
+			Code:    errs.InvalidArgument,
+			Message: "billing_period_end is a required field",
+		}
+	}
+
 	req := &temporal.BillLifecycleWorkflowRequest{
-		BillID:     params.BillID,
-		PolicyType: policyType,
+		BillID:           params.BillID,
+		PolicyType:       policyType,
+		BillingPeriodEnd: params.BillingPeriodEnd,
 	}
 
 	_, err = s.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
