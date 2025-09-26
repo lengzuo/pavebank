@@ -18,26 +18,17 @@ const (
 type Activities struct{}
 
 func (a *Activities) AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata) error {
-	status, err := dao.GetBillStatus(ctx, billID)
+	err := dao.AddLineItemTx(ctx, billID, currency, amount, metadata)
 	if err != nil {
-		if errors.Is(err, errors.New("bill not found")) {
-			return temporal.NewNonRetryableApplicationError("bill not found", billNotFound, err)
+		if errors.Is(err, dao.ErrBillNotFound) {
+			return temporal.NewNonRetryableApplicationError(err.Error(), billNotFound, err)
 		}
-		return fmt.Errorf("failed to get bill status: %w", err)
+		if errors.Is(err, dao.ErrBillIsClosed) {
+			return temporal.NewNonRetryableApplicationError(err.Error(), billClosed, err)
+		}
+		// For any other error, let Temporal's retry policy handle it.
+		return fmt.Errorf("failed to add line item transactionally: %w", err)
 	}
-
-	if status == model.BillStatusClosed {
-		return temporal.NewNonRetryableApplicationError("bill is closed", billClosed, nil)
-	}
-
-	if err := dao.InsertLineItem(ctx, billID, currency, amount, metadata); err != nil {
-		return fmt.Errorf("failed to insert line item: %w", err)
-	}
-
-	if err := dao.UpdateBillTotal(ctx, billID, currency, amount); err != nil {
-		return fmt.Errorf("failed to update bill total: %w", err)
-	}
-
 	return nil
 }
 
