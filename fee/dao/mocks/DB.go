@@ -251,6 +251,34 @@ func (_m *DB) InsertLineItem(ctx context.Context, billID string, currency string
 	return r0
 }
 
+// IsBillExists provides a mock function with given fields: ctx, billID
+func (_m *DB) IsBillExists(ctx context.Context, billID string) (bool, error) {
+	ret := _m.Called(ctx, billID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for IsBillExists")
+	}
+
+	var r0 bool
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) (bool, error)); ok {
+		return rf(ctx, billID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) bool); ok {
+		r0 = rf(ctx, billID)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, billID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // UpdateBillTotal provides a mock function with given fields: ctx, billID, currency, amount
 func (_m *DB) UpdateBillTotal(ctx context.Context, billID string, currency string, amount int64) error {
 	ret := _m.Called(ctx, billID, currency, amount)
