@@ -23,9 +23,17 @@ var db = sqldb.NewDatabase("fee", sqldb.DatabaseConfig{
 	Migrations: "./migrations",
 })
 
+type dbStore struct {
+	db *sqldb.Database
+}
+
+func New() DB {
+	return &dbStore{db: db}
+}
+
 // CreateBill inserts a new bill into the database.
-func CreateBill(ctx context.Context, billID, policyType string) error {
-	_, err := db.Exec(ctx, `
+func (d *dbStore) CreateBill(ctx context.Context, billID, policyType string) error {
+	_, err := d.db.Exec(ctx, `
 		INSERT INTO bills (bill_id, policy_type, status, updated_at)
 		VALUES ($1, $2, $3, now())
 		ON CONFLICT (bill_id) DO NOTHING;
@@ -37,9 +45,9 @@ func CreateBill(ctx context.Context, billID, policyType string) error {
 }
 
 // GetBillStatus retrieves the status of a bill.
-func GetBillStatus(ctx context.Context, billID string) (model.BillStatus, error) {
+func (d *dbStore) GetBillStatus(ctx context.Context, billID string) (model.BillStatus, error) {
 	var status model.BillStatus
-	err := db.QueryRow(ctx, "SELECT status FROM bills WHERE bill_id = $1", billID).Scan(&status)
+	err := d.db.QueryRow(ctx, "SELECT status FROM bills WHERE bill_id = $1", billID).Scan(&status)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", errors.New("bill not found")
@@ -50,13 +58,13 @@ func GetBillStatus(ctx context.Context, billID string) (model.BillStatus, error)
 }
 
 // InsertLineItem inserts a new line item for a bill.
-func InsertLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata) error {
+func (d *dbStore) InsertLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata) error {
 	metadataBytes, err := json.Marshal(metadata)
 	if err != nil {
 		return fmt.Errorf("failed to marshal line item metadata: %w", err)
 	}
 
-	_, err = db.Exec(ctx, `
+	_, err = d.db.Exec(ctx, `
 		INSERT INTO line_items (bill_id, currency, amount, metadata)
 		VALUES ($1, $2, $3, $4)
 	`, billID, currency, amount, metadataBytes)
@@ -67,10 +75,10 @@ func InsertLineItem(ctx context.Context, billID, currency string, amount int64, 
 }
 
 // UpdateBillTotal updates the total amount for a bill in a specific currency within the metadata JSONB.
-func UpdateBillTotal(ctx context.Context, billID, currency string, amount int64) error {
+func (d *dbStore) UpdateBillTotal(ctx context.Context, billID, currency string, amount int64) error {
 	// Retrieve current metadata
 	var currentMetadataJSON []byte
-	err := db.QueryRow(ctx, `SELECT metadata FROM bills WHERE bill_id = $1`, billID).Scan(&currentMetadataJSON)
+	err := d.db.QueryRow(ctx, `SELECT metadata FROM bills WHERE bill_id = $1`, billID).Scan(&currentMetadataJSON)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return errors.New("bill not found")
@@ -97,7 +105,7 @@ func UpdateBillTotal(ctx context.Context, billID, currency string, amount int64)
 	}
 
 	// Update the database with the new JSON
-	_, err = db.Exec(ctx, `
+	_, err = d.db.Exec(ctx, `
 		UPDATE bills
 		SET metadata = $2
 		WHERE bill_id = $1
@@ -124,12 +132,12 @@ func UpdateBillTotal(ctx context.Context, billID, currency string, amount int64)
 // }
 
 // CloseBill updates the status and metadata of a bill to closed.
-func CloseBill(ctx context.Context, billID string, metadata model.BillMetadata) error {
+func (d *dbStore) CloseBill(ctx context.Context, billID string, metadata model.BillMetadata) error {
 	metaBytes, err := json.Marshal(metadata)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(ctx, `
+	_, err = d.db.Exec(ctx, `
 		UPDATE bills
 		SET status = $1, metadata = $2, closed_at = now()
 		WHERE bill_id = $3
@@ -142,10 +150,10 @@ func CloseBill(ctx context.Context, billID string, metadata model.BillMetadata) 
 }
 
 // GetBill retrieves a bill's main details.
-func GetBill(ctx context.Context, billID string) (*model.BillDetail, error) {
+func (d *dbStore) GetBill(ctx context.Context, billID string) (*model.BillDetail, error) {
 	var bill model.BillDetail
 	var jsonData []byte
-	err := db.QueryRow(ctx, `
+	err := d.db.QueryRow(ctx, `
 		SELECT bill_id, status, policy_type, created_at, metadata, closed_at
 		FROM bills
 		WHERE bill_id = $1 
@@ -160,7 +168,7 @@ func GetBill(ctx context.Context, billID string) (*model.BillDetail, error) {
 		}
 		bill.TotalCharges = totalBillCharges
 	}
-	lineItems, err := GetLineItemsForBill(ctx, billID)
+	lineItems, err := d.GetLineItemsForBill(ctx, billID)
 	if err != nil {
 		return nil, err
 	}
@@ -169,8 +177,8 @@ func GetBill(ctx context.Context, billID string) (*model.BillDetail, error) {
 }
 
 // GetLineItemsForBill retrieves all line items for a given bill.
-func GetLineItemsForBill(ctx context.Context, billID string) ([]model.LineItemSummary, error) {
-	rows, err := db.Query(ctx, `
+func (d *dbStore) GetLineItemsForBill(ctx context.Context, billID string) ([]model.LineItemSummary, error) {
+	rows, err := d.db.Query(ctx, `
 		SELECT currency, amount
 		FROM line_items
 		WHERE bill_id = $1
@@ -211,7 +219,7 @@ func constructTotalCharges(jsonData []byte) ([]model.TotalSummary, error) {
 }
 
 // GetBills retrieves a list of bills filtered by status.
-func GetBills(ctx context.Context, status model.BillStatus, limit int, cursor time.Time) ([]*model.BillDetail, bool, error) {
+func (d *dbStore) GetBills(ctx context.Context, status model.BillStatus, limit int, cursor time.Time) ([]*model.BillDetail, bool, error) {
 	query := `
 		SELECT bill_id, status, policy_type, created_at, metadata, closed_at
 		FROM bills
@@ -219,7 +227,7 @@ func GetBills(ctx context.Context, status model.BillStatus, limit int, cursor ti
 		ORDER BY created_at DESC LIMIT $3
 	`
 	args := []any{cursor, status, limit + 1}
-	rows, err := db.Query(ctx, query, args...)
+	rows, err := d.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, false, err
 	}
@@ -251,7 +259,7 @@ func GetBills(ctx context.Context, status model.BillStatus, limit int, cursor ti
 }
 
 // GetBillIDs retrieves a bill id from status policy type
-func GetBillIDs(ctx context.Context, status model.BillStatus, policyType model.PolicyType, limit int, cursor time.Time) ([]string, bool, error) {
+func (d *dbStore) GetBillIDs(ctx context.Context, status model.BillStatus, policyType model.PolicyType, limit int, cursor time.Time) ([]string, bool, error) {
 	query := `
 		SELECT bill_id
 		FROM bills
@@ -259,7 +267,7 @@ func GetBillIDs(ctx context.Context, status model.BillStatus, policyType model.P
 		ORDER BY created_at DESC LIMIT $4
 	`
 	args := []interface{}{cursor, status, policyType, limit + 1}
-	rows, err := db.Query(ctx, query, args...)
+	rows, err := d.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, false, err
 	}
@@ -282,12 +290,12 @@ func GetBillIDs(ctx context.Context, status model.BillStatus, policyType model.P
 	return billIDs, hasMore, nil
 }
 
-func AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata, uid string) error {
+func (d *dbStore) AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata, uid string) error {
 	metadataBytes, err := json.Marshal(metadata)
 	if err != nil {
 		return fmt.Errorf("failed to marshal line item metadata: %w", err)
 	}
-	_, err = db.Exec(ctx, `
+	_, err = d.db.Exec(ctx, `
 		INSERT INTO line_items (bill_id, currency, amount, metadata, uid)
 		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (uid) DO NOTHING;

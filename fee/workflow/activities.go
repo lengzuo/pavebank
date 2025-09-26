@@ -15,10 +15,12 @@ const (
 	billNotFound = "BillNotFoundError"
 )
 
-type Activities struct{}
+type Activities struct {
+	DB dao.DB
+}
 
 func (a *Activities) AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata, uid string) error {
-	err := dao.AddLineItem(ctx, billID, currency, amount, metadata, uid)
+	err := a.DB.AddLineItem(ctx, billID, currency, amount, metadata, uid)
 	if err != nil {
 		return fmt.Errorf("failed to add line item: %s", err)
 	}
@@ -26,7 +28,7 @@ func (a *Activities) AddLineItem(ctx context.Context, billID, currency string, a
 }
 
 func (a *Activities) CreateBill(ctx context.Context, billID string, policyType model.PolicyType) error {
-	return dao.CreateBill(ctx, billID, string(policyType))
+	return a.DB.CreateBill(ctx, billID, string(policyType))
 }
 
 // func (a *Activities) CloseBill(ctx context.Context, billID string) error {
@@ -45,13 +47,13 @@ func (a *Activities) CloseBillFromState(ctx context.Context, state BillState) er
 	billMetadata := model.BillMetadata{
 		TotalAmounts: state.Totals,
 	}
-	err := dao.CloseBill(ctx, state.BillID, billMetadata)
+	err := a.DB.CloseBill(ctx, state.BillID, billMetadata)
 	return err
 }
 
 func (a *Activities) GetBillDetail(ctx context.Context, billID string) (*model.BillDetail, error) {
 	var billDetail *model.BillDetail
-	billDetail, err := dao.GetBill(ctx, billID)
+	billDetail, err := a.DB.GetBill(ctx, billID)
 	if err != nil {
 		if errors.Is(err, errors.New("bill not found")) {
 			return nil, temporal.NewNonRetryableApplicationError("bill not found", billNotFound, err)

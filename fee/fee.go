@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"encore.app/fee/dao"
 	temporal "encore.app/fee/workflow"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -13,6 +14,7 @@ import (
 type Service struct {
 	client  client.Client
 	workers []worker.Worker
+	db      dao.DB
 }
 
 func initService() (*Service, error) {
@@ -25,11 +27,12 @@ func initService() (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temporal client: %w", err)
 	}
+	db := dao.New()
 
 	// Initialize and start the worker using the created client
 	billCycleWorker := worker.New(tc, temporal.BillCycleTaskQueue, worker.Options{})
 	billCycleWorker.RegisterWorkflow(temporal.BillLifecycleWorkflow)
-	billCycleWorker.RegisterActivity(&temporal.Activities{})
+	billCycleWorker.RegisterActivity(&temporal.Activities{DB: db})
 	err = billCycleWorker.Start()
 	if err != nil {
 		tc.Close()
@@ -38,7 +41,7 @@ func initService() (*Service, error) {
 
 	closedBillWorker := worker.New(tc, temporal.ClosedBillTaskQueue, worker.Options{})
 	closedBillWorker.RegisterWorkflow(temporal.ClosedBillPostProcessWorkflow)
-	closedBillWorker.RegisterActivity(&temporal.Activities{})
+	closedBillWorker.RegisterActivity(&temporal.Activities{DB: db})
 	err = closedBillWorker.Start()
 	if err != nil {
 		tc.Close()
@@ -47,7 +50,7 @@ func initService() (*Service, error) {
 	}
 	allWorkers := []worker.Worker{billCycleWorker, closedBillWorker}
 
-	return &Service{client: tc, workers: allWorkers}, nil
+	return &Service{client: tc, workers: allWorkers, db: db}, nil
 }
 
 func (s *Service) Shutdown(force context.Context) {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"encore.app/fee/dao"
 	"encore.app/fee/model"
 	temporal "encore.app/fee/workflow"
 	"encore.dev/rlog"
@@ -57,7 +56,7 @@ func (s *Service) GetBills(ctx context.Context, params *GetBillsParams) (*GetBil
 		}
 	}
 
-	bills, hasMore, err := dao.GetBills(ctx, status, params.Limit, cursor)
+	bills, hasMore, err := s.db.GetBills(ctx, status, params.Limit, cursor)
 	if err != nil {
 		rlog.Error("failed to get bills", "error", err)
 		return nil, err

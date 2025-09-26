@@ -16,8 +16,8 @@ var (
 	BillCycleTaskQueue        = envName + "bill3-lifecycle"
 	ClosedBillTaskQueue       = envName + "closed-bill-lifecycle"
 	startToCloseTimeout       = 1 * time.Minute
-	maxRetryAttempt     int32 = 10
 	QueryBillTotal            = "GET_BILL_TOTAL"
+	maxRetryAttempt     int32 = 10
 )
 
 const (
