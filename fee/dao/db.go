@@ -162,7 +162,7 @@ func (d *dbStore) GetBill(ctx context.Context, billID string) (*model.BillDetail
 		return nil, err
 	}
 	if len(jsonData) > 0 {
-		totalBillCharges, err := constructTotalCharges(jsonData)
+		totalBillCharges, err := totalAmount(jsonData)
 		if err != nil {
 			return nil, err
 		}
@@ -177,9 +177,9 @@ func (d *dbStore) GetBill(ctx context.Context, billID string) (*model.BillDetail
 }
 
 // GetLineItemsForBill retrieves all line items for a given bill.
-func (d *dbStore) GetLineItemsForBill(ctx context.Context, billID string) ([]model.LineItemSummary, error) {
+func (d *dbStore) GetLineItemsForBill(ctx context.Context, billID string) ([]model.LineItem, error) {
 	rows, err := d.db.Query(ctx, `
-		SELECT currency, amount
+		SELECT currency, amount, metadata, created_at
 		FROM line_items
 		WHERE bill_id = $1
 		ORDER BY created_at DESC
@@ -189,33 +189,32 @@ func (d *dbStore) GetLineItemsForBill(ctx context.Context, billID string) ([]mod
 	}
 	defer rows.Close()
 
-	var lineItems []model.LineItemSummary
+	var lineItems []model.LineItem
 	for rows.Next() {
-		var item model.LineItemSummary
-		if err := rows.Scan(&item.Currency, &item.Amount); err != nil {
+		var item model.LineItem
+		if err := rows.Scan(&item.Currency, &item.Amount, &item.Metadata, &item.CreatedAt); err != nil {
 			return nil, err
 		}
-		item.DisplayAmount = model.FormatAmount(item.Amount)
 		lineItems = append(lineItems, item)
 	}
 	return lineItems, nil
 }
 
-func constructTotalCharges(jsonData []byte) ([]model.TotalSummary, error) {
+func totalAmount(jsonData []byte) (map[string]int64, error) {
 	var billMetadata model.BillMetadata
 	if err := json.Unmarshal(jsonData, &billMetadata); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
 	}
-
-	var totalCharges []model.TotalSummary
-	for currency, amount := range billMetadata.TotalAmounts {
-		totalCharges = append(totalCharges, model.TotalSummary{
-			Currency:      currency,
-			TotalAmount:   amount,
-			DisplayAmount: model.FormatAmount(amount),
-		})
-	}
-	return totalCharges, nil
+	return billMetadata.TotalAmounts, nil
+	// var totalCharges []model.TotalSummary
+	// for currency, amount := range billMetadata.TotalAmounts {
+	// 	totalCharges = append(totalCharges, model.TotalSummary{
+	// 		Currency:      currency,
+	// 		TotalAmount:   amount,
+	// 		DisplayAmount: model.FormatAmount(amount),
+	// 	})
+	// }
+	// return totalCharges, nil
 }
 
 // GetBills retrieves a list of bills filtered by status.
@@ -241,7 +240,7 @@ func (d *dbStore) GetBills(ctx context.Context, status model.BillStatus, limit i
 			return nil, false, err
 		}
 		if len(jsonData) > 0 {
-			totalBillCharges, err := constructTotalCharges(jsonData)
+			totalBillCharges, err := totalAmount(jsonData)
 			if err != nil {
 				return nil, false, err
 			}
@@ -304,6 +303,18 @@ func (d *dbStore) AddLineItem(ctx context.Context, billID, currency string, amou
 		return fmt.Errorf("failed to insert line item: %w", err)
 	}
 	return nil
+}
+
+// IsBillExists checks if a bill with the given ID exists in the database.
+func (d *dbStore) IsBillExists(ctx context.Context, billID string) (bool, error) {
+	var exists bool
+	query := "SELECT EXISTS(SELECT 1 FROM bills WHERE bill_id = $1)"
+	err := d.db.QueryRow(ctx, query, billID).Scan(&exists)
+	if err != nil && err != sql.ErrNoRows {
+		rlog.Error("failed to check if bill exists", "error", err, "bill_id", billID)
+		return false, err
+	}
+	return exists, nil
 }
 
 // AddLineItemTx adds a line item within a single database transaction to ensure atomicity.

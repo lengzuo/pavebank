@@ -3,7 +3,6 @@ package temporal
 import (
 	"time"
 
-	"encore.app/fee/model"
 	"encore.dev"
 	"encore.dev/rlog"
 	"go.temporal.io/api/enums/v1"
@@ -31,7 +30,7 @@ type BillState struct {
 }
 
 // BillLifecycleWorkflow
-func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowRequest) (*model.BillDetail, error) {
+func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowRequest) (*BillResponse, error) {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: startToCloseTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -130,7 +129,7 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 	workflow.GetLogger(ctx).Info("Bill closed successfully.", "BillID", req.BillID)
 
 	// After the billDetail is closed, get the final billDetail.
-	var billDetail model.BillDetail
+	var billDetail BillResponse
 	err = workflow.ExecuteActivity(ctx, activities.GetBillDetail, req.BillID).Get(ctx, &billDetail)
 	if err != nil {
 		workflow.GetLogger(ctx).Error("Failed to get final bill summary, failing workflow.", "Error", err, "BillID", req.BillID)
@@ -174,26 +173,26 @@ func ClosedBillPostProcessWorkflow(ctx workflow.Context, req *BillClosedPostProc
 
 	var activities *Activities
 
-	var billSummary model.BillDetail
-	err := workflow.ExecuteActivity(ctx, activities.GetBillDetail, req.BillID).Get(ctx, &billSummary)
+	var billDetail BillResponse
+	err := workflow.ExecuteActivity(ctx, activities.GetBillDetail, req.BillID).Get(ctx, &billDetail)
 	if err != nil {
 		workflow.GetLogger(ctx).Error("Failed to get final bill summary, failing workflow.", "Error", err, "BillID", req.BillID)
 		return err
 	}
 
-	err = workflow.ExecuteActivity(ctx, activities.GeneratePDFInvoive, req.BillID).Get(ctx, &billSummary)
+	err = workflow.ExecuteActivity(ctx, activities.GeneratePDFInvoive, req.BillID).Get(ctx, &billDetail)
 	if err != nil {
 		workflow.GetLogger(ctx).Error("Failed to generate pdf invoice", "Error", err, "BillID", req.BillID)
 		return err
 	}
 
-	err = workflow.ExecuteActivity(ctx, activities.CreatePaymentLink, req.BillID).Get(ctx, &billSummary)
+	err = workflow.ExecuteActivity(ctx, activities.CreatePaymentLink, req.BillID).Get(ctx, &billDetail)
 	if err != nil {
 		workflow.GetLogger(ctx).Error("Failed to create payment link.", "Error", err, "BillID", req.BillID)
 		return err
 	}
 
-	err = workflow.ExecuteActivity(ctx, activities.SendBillEmail, req.BillID).Get(ctx, &billSummary)
+	err = workflow.ExecuteActivity(ctx, activities.SendBillEmail, req.BillID).Get(ctx, &billDetail)
 	if err != nil {
 		workflow.GetLogger(ctx).Error("Failed to send email.", "Error", err, "BillID", req.BillID)
 		return err

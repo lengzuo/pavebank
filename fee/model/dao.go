@@ -97,7 +97,6 @@ type LineItemMetadata struct {
 }
 
 type LineItem struct {
-	BillID    string    `json:"bill_id"`
 	Metadata  string    `json:"metadata"`
 	Currency  string    `json:"currency"`
 	Amount    int64     `json:"amount"`
@@ -105,23 +104,21 @@ type LineItem struct {
 }
 
 type LineItemSummary struct {
-	Currency      string `json:"currency"`
-	Amount        int64  `json:"amount"`
-	DisplayAmount string `json:"display_amount"`
+	Currency string `json:"currency"`
+	Amount   int64  `json:"amount"`
 }
 
 type TotalSummary struct {
-	Currency      string `json:"currency"`
-	TotalAmount   int64  `json:"total_amount"`
-	DisplayAmount string `json:"display_amount"`
+	Currency    string `json:"currency"`
+	TotalAmount int64  `json:"total_amount"`
 }
 
 type BillDetail struct {
-	BillID       string            `json:"bill_id"`
-	Status       string            `json:"status"`
-	PolicyType   string            `json:"policy_type"`
-	CreatedAt    time.Time         `json:"created_at"`
-	ClosedAt     *time.Time        `json:"closed_at,omitempty"`
-	LineItems    []LineItemSummary `json:"line_items"`
-	TotalCharges []TotalSummary    `json:"total_charges"`
+	BillID       string           `json:"bill_id"`
+	Status       string           `json:"status"`
+	PolicyType   string           `json:"policy_type"`
+	CreatedAt    time.Time        `json:"created_at"`
+	ClosedAt     *time.Time       `json:"closed_at,omitempty"`
+	LineItems    []LineItem       `json:"line_items"`
+	TotalCharges map[string]int64 `json:"total_charges"`
 }

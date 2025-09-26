@@ -12,9 +12,10 @@ import (
 
 //encore:service
 type Service struct {
-	client  client.Client
-	workers []worker.Worker
-	db      dao.DB
+	client   client.Client
+	workers  []worker.Worker
+	db       dao.DB
+	activity *temporal.Activities
 }
 
 func initService() (*Service, error) {
@@ -29,10 +30,12 @@ func initService() (*Service, error) {
 	}
 	db := dao.New()
 
+	activity := temporal.NewActivity(db)
+
 	// Initialize and start the worker using the created client
 	billCycleWorker := worker.New(tc, temporal.BillCycleTaskQueue, worker.Options{})
 	billCycleWorker.RegisterWorkflow(temporal.BillLifecycleWorkflow)
-	billCycleWorker.RegisterActivity(&temporal.Activities{DB: db})
+	billCycleWorker.RegisterActivity(activity)
 	err = billCycleWorker.Start()
 	if err != nil {
 		tc.Close()
@@ -41,7 +44,7 @@ func initService() (*Service, error) {
 
 	closedBillWorker := worker.New(tc, temporal.ClosedBillTaskQueue, worker.Options{})
 	closedBillWorker.RegisterWorkflow(temporal.ClosedBillPostProcessWorkflow)
-	closedBillWorker.RegisterActivity(&temporal.Activities{DB: db})
+	closedBillWorker.RegisterActivity(activity)
 	err = closedBillWorker.Start()
 	if err != nil {
 		tc.Close()
@@ -50,7 +53,7 @@ func initService() (*Service, error) {
 	}
 	allWorkers := []worker.Worker{billCycleWorker, closedBillWorker}
 
-	return &Service{client: tc, workers: allWorkers, db: db}, nil
+	return &Service{client: tc, workers: allWorkers, db: db, activity: activity}, nil
 }
 
 func (s *Service) Shutdown(force context.Context) {

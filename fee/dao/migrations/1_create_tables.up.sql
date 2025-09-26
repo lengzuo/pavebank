@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS bills (
     closed_at TIMESTAMPTZ,
     UNIQUE(bill_id)
 );
-CREATE INDEX idx_bill_created_at_desc ON bills (created_at DESC);
+CREATE INDEX idx_bills_status_created_at_desc ON bills (status, created_at DESC);
 
 --
 -- Create line_items table

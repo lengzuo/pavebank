@@ -2,12 +2,11 @@ package temporal
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
 
 	"encore.app/fee/dao"
 	"encore.app/fee/model"
-	"go.temporal.io/sdk/temporal"
 )
 
 const (
@@ -16,11 +15,15 @@ const (
 )
 
 type Activities struct {
-	DB dao.DB
+	db dao.DB
+}
+
+func NewActivity(db dao.DB) *Activities {
+	return &Activities{db: db}
 }
 
 func (a *Activities) AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata, uid string) error {
-	err := a.DB.AddLineItem(ctx, billID, currency, amount, metadata, uid)
+	err := a.db.AddLineItem(ctx, billID, currency, amount, metadata, uid)
 	if err != nil {
 		return fmt.Errorf("failed to add line item: %s", err)
 	}
@@ -28,39 +31,54 @@ func (a *Activities) AddLineItem(ctx context.Context, billID, currency string, a
 }
 
 func (a *Activities) CreateBill(ctx context.Context, billID string, policyType model.PolicyType) error {
-	return a.DB.CreateBill(ctx, billID, string(policyType))
+	return a.db.CreateBill(ctx, billID, string(policyType))
 }
-
-// func (a *Activities) CloseBill(ctx context.Context, billID string) error {
-// 	// Update the bill status
-// 	err := dao.CloseBill(ctx, billID)
-// 	// TODO: Generate PDF invoice using html2pdf
-// 	err = a.GeneratePDFInvoive(ctx, billID)
-// 	// TODO: Create payment link
-// 	err = a.CreatePaymentLink(ctx, billID)
-// 	// TODO: Email the PDF to client using sendgrid.
-// 	err = a.SendBillEmail(ctx, billID)
-// 	return err
-// }
 
 func (a *Activities) CloseBillFromState(ctx context.Context, state BillState) error {
 	billMetadata := model.BillMetadata{
 		TotalAmounts: state.Totals,
 	}
-	err := a.DB.CloseBill(ctx, state.BillID, billMetadata)
+	err := a.db.CloseBill(ctx, state.BillID, billMetadata)
 	return err
 }
 
-func (a *Activities) GetBillDetail(ctx context.Context, billID string) (*model.BillDetail, error) {
-	var billDetail *model.BillDetail
-	billDetail, err := a.DB.GetBill(ctx, billID)
+func (a *Activities) GetBillDetail(ctx context.Context, billID string) (*BillResponse, error) {
+	bill, err := a.db.GetBill(ctx, billID)
 	if err != nil {
-		if errors.Is(err, errors.New("bill not found")) {
-			return nil, temporal.NewNonRetryableApplicationError("bill not found", billNotFound, err)
-		}
-		return nil, fmt.Errorf("failed to get bill header: %w", err)
+		return nil, err
 	}
-	return billDetail, nil
+	resp := &BillResponse{
+		BillID:     bill.BillID,
+		Status:     bill.Status,
+		PolicyType: bill.PolicyType,
+		CreatedAt:  bill.CreatedAt,
+		ClosedAt:   bill.ClosedAt,
+	}
+	resp.TotalCharges = make([]TotalSummary, 0, len(bill.TotalCharges))
+	for currency, amount := range bill.TotalCharges {
+		resp.TotalCharges = append(resp.TotalCharges, TotalSummary{
+			Currency:      currency,
+			TotalAmount:   amount,
+			DisplayAmount: model.FormatAmount(amount),
+		})
+	}
+	resp.LineItems = make([]LineItem, 0, len(bill.LineItems))
+	for _, item := range bill.LineItems {
+		var metadata model.LineItemMetadata
+		err := json.Unmarshal([]byte(item.Metadata), &metadata)
+		if err != nil {
+			return nil, err
+		}
+		resp.LineItems = append(resp.LineItems, LineItem{
+			Currency:      item.Currency,
+			Amount:        item.Amount,
+			Description:   metadata.Description,
+			CreatedAt:     item.CreatedAt,
+			DisplayAmount: model.FormatAmount(item.Amount),
+		})
+	}
+
+	return resp, nil
 }
 
 func (a *Activities) GeneratePDFInvoive(ctx context.Context, billID string) error {

@@ -2,10 +2,12 @@ package fee
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"encore.app/fee/model"
 	temporal "encore.app/fee/workflow"
+	"encore.dev/beta/errs"
 	"encore.dev/rlog"
 )
 
@@ -37,10 +39,13 @@ type GetBillsParams struct {
 
 //encore:api public method=GET path=/bills
 func (s *Service) GetBills(ctx context.Context, params *GetBillsParams) (*GetBillsResponse, error) {
-	status, err := model.ToBillStatus(params.Status)
+	status, err := model.ToBillStatus(strings.ToUpper(params.Status))
 	if err != nil {
-		rlog.Error("invalid status", "error", err)
-		return nil, err
+		rlog.Error("invalid status", params.Status, "error", err)
+		return nil, &errs.Error{
+			Code:    errs.InvalidArgument,
+			Message: "invalid status",
+		}
 	}
 
 	if params.Limit == 0 {
@@ -96,11 +101,14 @@ func (s *Service) GetBills(ctx context.Context, params *GetBillsParams) (*GetBil
 			}
 			continue
 		}
-		resp.Bills[i].TotalCharges = make([]TotalSummary, len(bill.TotalCharges))
-		for j, total := range bill.TotalCharges {
-			resp.Bills[i].TotalCharges[j].Currency = total.Currency
-			resp.Bills[i].TotalCharges[j].DisplayAmount = total.DisplayAmount
-			resp.Bills[i].TotalCharges[j].TotalAmount = total.TotalAmount
+		resp.Bills[i].TotalCharges = make([]TotalSummary, 0, len(bill.TotalCharges))
+		for currency := range bill.TotalCharges {
+			amount := bill.TotalCharges[currency]
+			resp.Bills[i].TotalCharges = append(resp.Bills[i].TotalCharges, TotalSummary{
+				Currency:      currency,
+				TotalAmount:   amount,
+				DisplayAmount: model.FormatAmount(amount),
+			})
 		}
 	}
 

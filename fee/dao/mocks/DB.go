@@ -204,23 +204,23 @@ func (_m *DB) GetBills(ctx context.Context, status model.BillStatus, limit int, 
 }
 
 // GetLineItemsForBill provides a mock function with given fields: ctx, billID
-func (_m *DB) GetLineItemsForBill(ctx context.Context, billID string) ([]model.LineItemSummary, error) {
+func (_m *DB) GetLineItemsForBill(ctx context.Context, billID string) ([]model.LineItem, error) {
 	ret := _m.Called(ctx, billID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetLineItemsForBill")
 	}
 
-	var r0 []model.LineItemSummary
+	var r0 []model.LineItem
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) ([]model.LineItemSummary, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) ([]model.LineItem, error)); ok {
 		return rf(ctx, billID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) []model.LineItemSummary); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) []model.LineItem); ok {
 		r0 = rf(ctx, billID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]model.LineItemSummary)
+			r0 = ret.Get(0).([]model.LineItem)
 		}
 	}
 

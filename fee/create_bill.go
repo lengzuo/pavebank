@@ -50,7 +50,19 @@ func (s *Service) CreateBill(ctx context.Context, params *CreateBillParams) (*Cr
 		BillingPeriodEnd: params.BillingPeriodEnd,
 	}
 
-	_, err := s.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	exists, err := s.db.IsBillExists(ctx, params.BillID)
+	if err != nil {
+		rlog.Error("failed in checking bill exists in db", "error", err)
+		return nil, err
+	}
+	if exists {
+		return nil, &errs.Error{
+			Code:    errs.InvalidArgument,
+			Message: "duplicate bill id",
+		}
+	}
+
+	_, err = s.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        "bill-" + params.BillID,
 		TaskQueue: temporal.BillCycleTaskQueue,
 	}, temporal.BillLifecycleWorkflow, req)

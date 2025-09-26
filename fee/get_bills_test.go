@@ -99,10 +99,9 @@ func TestGetBills_CLOSED(t *testing.T) {
 			Status:     "CLOSED",
 			PolicyType: "USAGE_BASED",
 			CreatedAt:  time.Now(),
-			TotalCharges: []model.TotalSummary{{
-				Currency:    "USD",
-				TotalAmount: int64(100),
-			}},
+			TotalCharges: map[string]int64{
+				"USD": int64(100),
+			},
 		},
 	}
 

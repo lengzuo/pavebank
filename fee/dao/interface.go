@@ -14,8 +14,11 @@ type DB interface {
 	UpdateBillTotal(ctx context.Context, billID, currency string, amount int64) error
 	CloseBill(ctx context.Context, billID string, metadata model.BillMetadata) error
 	GetBill(ctx context.Context, billID string) (*model.BillDetail, error)
-	GetLineItemsForBill(ctx context.Context, billID string) ([]model.LineItemSummary, error)
+	GetLineItemsForBill(ctx context.Context, billID string) ([]model.LineItem, error)
 	GetBills(ctx context.Context, status model.BillStatus, limit int, cursor time.Time) ([]*model.BillDetail, bool, error)
 	GetBillIDs(ctx context.Context, status model.BillStatus, policyType model.PolicyType, limit int, cursor time.Time) ([]string, bool, error)
 	AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata, uid string) error
+	IsBillExists(ctx context.Context, billID string) (bool, error)
 }
+
+//go:generate mockery --name=DB --output=./mocks --outpkg=mocks

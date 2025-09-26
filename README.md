@@ -1,182 +1,206 @@
-# REST API Starter
+# Fees API with Encore and Temporal
 
-This is a RESTful API Starter with a single Hello World API endpoint.
+This project implements a robust Fees API using the [Encore.dev](https://encore.dev/) framework for the backend and [Temporal.io](https://temporal.io/) for orchestrating long-running, reliable billing workflows.
 
-## Prerequisites 
+It is designed to handle both usage-based and monthly billing cycles, allowing for the progressive accrual of fees (line items) and ensuring the durability and consistency of all financial operations.
 
-**Install Encore:**
-- **macOS:** `brew install encoredev/tap/encore`
-- **Linux:** `curl -L https://encore.dev/install.sh | bash`
-- **Windows:** `iwr https://encore.dev/install.ps1 | iex`
+## Project Overview
 
-## Create app
+The core of the system is a long-running Temporal workflow, `BillLifecycleWorkflow`, that represents the lifecycle of a single bill. This workflow is responsible for:
 
-Create a local app from this template:
+- Tracking a defined billing period (e.g., one month).
+- Accruing line item totals in its memory state via signals.
+- Persisting each line item to a database for a historical record.
+- Automatically closing the bill at the end of the period using a durable timer.
+- Triggering a decoupled child workflow for post-processing tasks like generating invoices and sending emails.
 
-```bash
-encore app create my-app-name --example=hello-world
-```
+## 1. Setup and Running
 
-## Run app locally
+### Prerequisites
 
-Run this command from your application's root folder:
+- **Go:** Version 1.18 or higher.
+- **Docker:** Required by Encore to run the local Postgres database.
+- **Temporalite:** A single-binary, zero-dependency distribution of Temporal for local development.
 
-```bash
-encore run
-```
-## Using the API
+### Installation & Setup
 
-To see that your app is running, you can ping the API.
+1.  **Install Encore:**
 
-```bash
-curl http://localhost:4000/hello/World
-```
+    ```bash
+    # macOS
+    brew install encoredev/tap/encore
 
-### Local Development Dashboard
+    # Linux
+    curl -L https://encore.dev/install.sh | bash
 
-While `encore run` is running, open [http://localhost:9400/](http://localhost:9400/) to access Encore's [local developer dashboard](https://encore.dev/docs/go/observability/dev-dash).
+    # Windows
+    iwr https://encore.dev/install.ps1 | iex
+    ```
 
-Here you can see traces for all requests that you made, see your architecture diagram (just a single service for this simple example), and view API documentation in the Service Catalog.
+2.  **Install and Run Temporalite:**
+    Follow the official instructions at [temporal.io/temporalite](https://temporal.io/temporalite) to install it. Once installed, start the local Temporal service:
 
-## Development
+    ```bash
+    ./temporalite start --namespace default
+    ```
 
-### Add a new service
+    Keep this terminal window open.
 
-With Encore.go you can create a new service by creating a regular Go package and then defining at least one API within it. Encore recognizes this as a service, and uses the package name as the service name.
+3.  **Run the Encore Application:**
+    In a separate terminal, from the project's root directory, run:
+    ```bash
+    encore run
+    ```
+    Encore will start the service, connect to the local Postgres database (run via Docker), and connect to the local Temporalite instance. You will see a **Development Dashboard URL** in your terminal.
 
-On disk it might look like this:
+## 2. API Reference
 
-```
-/my-app
-├── encore.app          // ... and other top-level project files
-│
-├── hello               // hello service (a Go package)
-│   ├── hello.go        // hello service code
-│   └── hello_test.go   // tests for hello service
-│
-└── world               // world service (a Go package)
-    └── world.go        // world service code
-```
+You can interact with the API via `curl` or by using the **API Explorer** in the Encore Development Dashboard (usually at `http://localhost:9400/`).
 
-Learn more in the docs: https://encore.dev/docs/go/primitives/services
+### Create a New Bill
 
-### Create an API endpoint
+Starts a new usage-based billing cycle for a given `bill_id`.
 
-With Encore.go you can turn a regular Go function into an API endpoint by adding the `//encore:api` annotation to it. This tells Encore that the function should be exposed as an API endpoint and Encore will automatically generate the necessary boilerplate at compile-time.
+**Endpoint:** `POST /bills`
 
-For example, in this app you app will have a `hello` service with a `Ping` API endpoint:
-
-```go
-//encore:api public path=/hello/:name
-func World(ctx context.Context, name string) (*Response, error) {
-	msg := "Hello, " + name + "!"
-	return &Response{Message: msg}, nil
-}
-
-type Response struct {
-	Message string
-}
-```
-
-You can define different access controls using:
-- `//encore:api public` - Public API endpoint
-- `//encore:api private` - Defines a private API that is never accessible to the outside world. It can only be called from other services in your app
-- `//encore:api auth` - Defines an API that anybody can call, but requires valid authentication
-
-Learn more in the docs: https://encore.dev/docs/go/primitives/defining-apis
-
-### Service-to-service API calls
-
-Calling an API endpoint looks like a regular function call with Encore.go. To call an endpoint you first import the other service as a Go package using `import "encore.app/package-name"`.
-
-In the example below, we import the service `hello` and call the `Ping` endpoint using a function call to `hello.Ping`:
-
-```go
-import "encore.app/hello" // import service
-
-//encore:api public
-func MyOtherAPI(ctx context.Context) error {
-    resp, err := hello.Ping(ctx, &hello.PingParams{Name: "World"})
-    if err == nil {
-        log.Println(resp.Message) // "Hello, World!"
-    }
-    return err
-}
-```
-
-Learn more in the docs: https://encore.dev/docs/go/primitives/api-calls
-
-### Add a database
-
-To create a database, import `encore.dev/storage/sqldb` and call `new SQLDatabase`, assigning the result to a top-level variable. For example:
-
-```go
-import "encore.dev/storage/sqldb"
-
-// Create the todo database and assign it to the "tododb" variable
-var tododb = sqldb.NewDatabase("todo", sqldb.DatabaseConfig{
-	Migrations: "./migrations",
-})
-```
-
-Then create a directory `migrations` inside the service directory and add a migration file `0001_create_table.up.sql` to define the database schema. For example:
-
-```sql
-CREATE TABLE todo_item (
-  id BIGSERIAL PRIMARY KEY,
-  title TEXT NOT NULL,
-  done BOOLEAN NOT NULL DEFAULT false
-  -- etc...
-);
-```
-
-Once you've added a migration, restart your app with `encore run` to start up the database and apply the migration. Keep in mind that you need to have [Docker](https://docker.com) installed and running to start the database.
-
-Learn more in the docs: https://encore.dev/docs/go/primitives/databases
-
-### Learn more
-
-There are many more features to explore in Encore.go, for example:
-
-- [Cron jobs](https://encore.dev/docs/go/primitives/cron-jobs)
-- [Pub/Sub](https://encore.dev/docs/go/primitives/pubsub)
-- [Object Storage](https://encore.dev/docs/go/primitives/object-storage)
-- [Secrets](https://encore.dev/docs/go/primitives/secrets)
-- [Authentication handlers](https://encore.dev/docs/go/develop/auth)
-- [Middleware](https://encore.dev/docs/go/develop/middleware)
-
-## Deployment
-
-### Self-hosting
-
-See the [self-hosting instructions](https://encore.dev/docs/go/self-host/docker-build) for how to use `encore build docker` to create a Docker image and configure it.
-
-### Encore Cloud Platform
-
-Deploy your application to a free staging environment in Encore's development cloud using `git push encore`:
+**`curl` Example:**
 
 ```bash
-git add -A .
-git commit -m 'Commit message'
-git push encore
+curl -X POST http://localhost:4000/bills \
+-H "Content-Type: application/json" \
+-H "X-Idempotency-Key: $(uuidgen)" \
+-d '{
+  "bill_id": "project-xyz-usage",
+  "billing_period_end": "'$(date -v+10M +%Y-%m-%dT%H:%M:%SZ)'"
+}'
 ```
 
-You can also open your app in the [Cloud Dashboard](https://app.encore.dev) to integrate with GitHub, or connect your AWS/GCP account, enabling Encore to automatically handle cloud deployments for you.
+_(Note: The `date` command above is for macOS/BSD to get a timestamp 10 minutes from now. Adjust for your shell.)_
 
-## Link to GitHub
+**How it Works:**
 
-Follow these steps to link your app to GitHub:
+- A request to this endpoint triggers the `BillLifecycleWorkflow` with a `usage_based` policy type.
+- The `X-Idempotency-Key` header is handled by Encore's middleware to prevent creating duplicate workflows from retried API calls.
+- The `billing_period_end` tells the workflow when to automatically close itself.
 
-1. Create a GitHub repo, commit and push the app.
-2. Open your app in the [Cloud Dashboard](https://app.encore.dev).
-3. Go to **Settings ➔ GitHub** and click on **Link app to GitHub** to link your app to GitHub and select the repo you just created.
-4. To configure Encore to automatically trigger deploys when you push to a specific branch name, go to the **Overview** page for your intended environment. Click on **Settings** and then in the section **Branch Push** configure the **Branch name** and hit **Save**.
-5. Commit and push a change to GitHub to trigger a deploy.
+### Add a Line Item
 
-[Learn more in the docs](https://encore.dev/docs/platform/integrations/github)
+Adds a fee to an existing, open bill.
 
-## Testing
+**Endpoint:** `POST /bills/{billID}/line-items`
+
+**`curl` Example:**
 
 ```bash
-encore test ./...
+curl -X POST http://localhost:4000/bills/project-xyz-usage/line-items \
+-H "Content-Type: application/json" \
+-H "X-Idempotency-Key: $(uuidgen)" \
+-d '{
+  "amount": 500,
+  "currency": "USD",
+  "description": "API Usage Charge"
+}'
 ```
+
+**How it Works:**
+
+- This sends an `AddLineItem` signal to the running workflow.
+- The workflow executes an activity that inserts the line item into the database. A unique `uid` is generated for this insertion to provide database-level idempotency.
+- If the insertion is successful, the workflow updates its internal in-memory total for that currency.
+
+### Manually Close a Bill
+
+Explicitly closes a bill before its scheduled `billing_period_end`.
+
+**Endpoint:** `POST /bills/{billID}/close`
+
+**`curl` Example:**
+
+```bash
+curl -X POST http://localhost:4000/bills/project-xyz-usage/close
+```
+
+**How it Works:**
+
+- Sends a `CloseBill` signal to the running workflow.
+- The workflow stops its timer, finalizes the bill state by persisting the in-memory totals to the database, and triggers the post-processing child workflow.
+
+### List Bills
+
+Retrieves a paginated list of open or closed bills.
+
+**Endpoint:** `GET /bills`
+
+**`curl` Example (get open bills):**
+
+```bash
+curl "http://localhost:4000/bills?status=open&limit=5"
+```
+
+**How it Works:**
+
+- This endpoint queries the database to get a list of bills.
+- **Hybrid State Model:**
+  - For **closed** bills, the total charges are read directly from the historical data in the database.
+  - For **open** bills, it performs a **Temporal Query** against the live running workflow to fetch the real-time, up-to-the-second totals from its memory.
+
+---
+
+## 3. Architectural Decisions
+
+This project includes several key design patterns that are critical for building robust, scalable financial systems.
+
+### 1. Hybrid State Management
+
+- **What:** The system uses a hybrid model for state. Live, in-flight totals are held in the workflow's memory for speed and consistency. Historical, finalized totals are persisted to the database for long-term storage and rich querying.
+- **Why:** This provides the best of both worlds: the real-time accuracy of a Temporal Query for open bills, and the powerful query capabilities of SQL for historical reporting and listing.
+
+### 2. Multi-Layer Idempotency
+
+- **What:** Idempotency is handled at two layers. The Encore API gateway handles an `X-Idempotency-Key` for API-level retries. The `AddLineItem` activity also generates a unique ID (`uid`) for every database insertion, using `ON CONFLICT DO NOTHING` to prevent duplicates at the data layer.
+- **Why:** This creates a robust defense against duplicate operations. API retries are stopped at the edge, and even if an internal error caused an activity to re-run, the database constraint would prevent a duplicate charge.
+
+### 3. Using `BIGINT` for Currency
+
+- **What:** All monetary values are stored as `BIGINT` in the database.
+- **Why:** This is a best practice for handling money. It represents the smallest unit of a currency (e.g., cents for USD) as a whole number, completely avoiding floating-point precision errors which are a common source of bugs in financial calculations.
+
+### 4. Decoupled Post-Processing with a Child Workflow
+
+- **What:** After a bill is closed, the parent workflow starts a "fire-and-forget" child workflow to handle secondary tasks like PDF generation and emailing.
+- **Why:** This decouples the critical financial transaction (closing the bill) from non-critical downstream operations. If the email service is down, it should not prevent the bill from being closed. The parent workflow completes quickly, and the child workflow can retry its tasks independently. This is achieved by setting `ParentClosePolicy: ABANDON`.
+
+### 5. Temporal Timer for Bill Closure
+
+- **What:** The workflow uses a durable `workflow.NewTimer` to automatically close the bill at its `billing_period_end`.
+- **Why:** This is far more reliable than an external cron job. The timer is part of the workflow's persistent state and is guaranteed by Temporal to fire at the correct time, even if the application crashes and restarts. This makes the billing cycle self-contained and fault-tolerant.
+
+---
+
+## 4. Future Considerations
+
+As a production-grade service, the following areas would be the next logical steps for improvement.
+
+### Monitoring and Alerting
+
+- **Problem:** If the `ClosedBillPostProcessWorkflow` fails after all retries, the system currently only logs an error.
+- **Solution:** Integrate a proper monitoring solution. This could involve:
+  - Emitting metrics to a system like Prometheus.
+  - Forwarding structured logs to a service like Datadog or an ELK stack.
+  - Setting up alerts (e.g., in PagerDuty or Slack) for critical failures, such as the inability to start a child workflow or a child workflow failing permanently.
+
+### Enhanced Testing
+
+- The project includes some unit tests, but a comprehensive test suite would include:
+  - **Integration Tests:** Using the Temporal test framework (`TestWorkflowEnvironment`) to run the full workflow and activity lifecycle in a simulated environment, verifying interactions and final state.
+  - **End-to-End Tests:** Scripts that call the live API endpoints and verify the behavior of the complete system.
+
+### Configuration Management
+
+- Currently, some values like timeouts and retry policies are hardcoded. These should be externalized into a configuration file or service so they can be tuned per environment (local, staging, production) without requiring a code change.
+
+### Security
+
+- The current API endpoints are public. In a real-world scenario, they would need to be protected. This would involve:
+  - Implementing an `//encore:api auth` handler.
+  - Defining authorization logic (e.g., only an authenticated service or user can add a line item to a bill).
