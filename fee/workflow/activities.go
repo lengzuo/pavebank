@@ -17,8 +17,8 @@ const (
 
 type Activities struct{}
 
-func (a *Activities) AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata) error {
-	err := dao.AddLineItem(ctx, billID, currency, amount, metadata)
+func (a *Activities) AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata, uid string) error {
+	err := dao.AddLineItem(ctx, billID, currency, amount, metadata, uid)
 	if err != nil {
 		return fmt.Errorf("failed to add line item: %s", err)
 	}

@@ -60,9 +60,6 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 	signalChan := workflow.GetSignalChannel(ctx, AddLineItemSignal)
 	closeChan := workflow.GetSignalChannel(ctx, CloseBillSignal)
 
-	// Idempotency tracking for line items
-	// processedLineItems := make(map[string]bool)
-
 	// Timer for automatic bill closure
 	var timerFired bool
 	timerCtx, cancelTimer := workflow.WithCancel(ctx)
@@ -78,21 +75,17 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 			var signal AddLineItemSignalRequest
 			c.Receive(ctx, &signal)
 
-			// Idempotency Check
-			// if processedLineItems[signal.LineItemID] {
-			// 	workflow.GetLogger(ctx).Info("Duplicate AddLineItem signal received, ignoring.", "LineItemID", signal.LineItemID)
-			// 	return // Ignore duplicate signal
-			// }
-			// processedLineItems[signal.LineItemID] = true
-			// workflow.GetLogger(ctx).Info("Received add line item signal", "LineItemID", signal.LineItemID)
-			err := workflow.ExecuteActivity(ctx, activities.AddLineItem, signal.BillID, signal.Currency, signal.Amount, signal.Metadata).Get(ctx, nil)
+			// Idempotency to ensure we only insert one entry if the activity error due to worker crash, network issues, or explicit retry policy
+			idempotencyKey := UUID()
+
+			err := workflow.ExecuteActivity(ctx, activities.AddLineItem, signal.BillID, signal.Currency, signal.Amount, signal.Metadata, idempotencyKey).Get(ctx, nil)
 			if err != nil {
 				// If adding a line item fails after retries, log it.
 				// Depending on business requirements, we might want to fail the workflow or send an alert.
 				// For now, we log and continue, as one failed item might not need to stop the whole bill.
 				workflow.GetLogger(ctx).Error("Failed to add line item after all retries.", "Error", err)
 			} else {
-				// workflow.GetLogger(ctx).Debug("Add line item activity completed.", "LineItemID", signal.LineItemID)
+				workflow.GetLogger(ctx).Debug("Add line item activity completed.", "BillID", signal.BillID)
 				state.Totals[string(signal.Currency)] += signal.Amount
 			}
 		})

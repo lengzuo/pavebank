@@ -37,6 +37,12 @@ func (s *Service) CreateBill(ctx context.Context, params *CreateBillParams) (*Cr
 			Message: "billing_period_end is a required field",
 		}
 	}
+	if params.BillingPeriodEnd.Before(time.Now().Add(1 * time.Minute)) {
+		return nil, &errs.Error{
+			Code:    errs.InvalidArgument,
+			Message: "billing_period_end is too short, must be at least 1 minutes ahead",
+		}
+	}
 
 	req := &temporal.BillLifecycleWorkflowRequest{
 		BillID:           params.BillID,

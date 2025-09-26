@@ -28,6 +28,7 @@ func CreateBill(ctx context.Context, billID, policyType string) error {
 	_, err := db.Exec(ctx, `
 		INSERT INTO bills (bill_id, policy_type, status, updated_at)
 		VALUES ($1, $2, $3, now())
+		ON CONFLICT (bill_id) DO NOTHING;
 	`, billID, policyType, model.BillStatusOpen)
 	if err != nil {
 		return err
@@ -281,15 +282,16 @@ func GetBillIDs(ctx context.Context, status model.BillStatus, policyType model.P
 	return billIDs, hasMore, nil
 }
 
-func AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata) error {
+func AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata, uid string) error {
 	metadataBytes, err := json.Marshal(metadata)
 	if err != nil {
 		return fmt.Errorf("failed to marshal line item metadata: %w", err)
 	}
 	_, err = db.Exec(ctx, `
-		INSERT INTO line_items (bill_id, currency, amount, metadata)
-		VALUES ($1, $2, $3, $4)
-	`, billID, currency, amount, metadataBytes)
+		INSERT INTO line_items (bill_id, currency, amount, metadata, uid)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (uid) DO NOTHING;
+	`, billID, currency, amount, metadataBytes, uid)
 	if err != nil {
 		return fmt.Errorf("failed to insert line item: %w", err)
 	}
@@ -297,73 +299,73 @@ func AddLineItem(ctx context.Context, billID, currency string, amount int64, met
 }
 
 // AddLineItemTx adds a line item within a single database transaction to ensure atomicity.
-func AddLineItemTx(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata) (err error) {
-	// tx, err := db.Begin(ctx)
-	// if err != nil {
-	// 	return fmt.Errorf("could not begin transaction: %w", err)
-	// }
-	// defer func() {
-	// 	if rbErr := tx.Rollback(); rbErr != nil && rbErr != sql.ErrTxDone {
-	// 		rlog.Error("failed to rollback")
-	// 	}
-	// }()
+// func AddLineItemTx(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata) (err error) {
+// 	tx, err := db.Begin(ctx)
+// 	if err != nil {
+// 		return fmt.Errorf("could not begin transaction: %w", err)
+// 	}
+// 	defer func() {
+// 		if rbErr := tx.Rollback(); rbErr != nil && rbErr != sql.ErrTxDone {
+// 			rlog.Error("failed to rollback")
+// 		}
+// 	}()
 
-	// 1. Get bill status and metadata in a single query, and lock the row for update.
-	// var status model.BillStatus
-	// var currentMetadataJSON []byte
-	// err = db.QueryRow(ctx, "SELECT status, metadata FROM bills WHERE bill_id = $1 FOR UPDATE", billID).Scan(&status, &currentMetadataJSON)
-	// if err != nil {
-	// 	if errors.Is(err, sql.ErrNoRows) {
-	// 		return ErrBillNotFound
-	// 	}
-	// 	return fmt.Errorf("failed to get bill status: %w", err)
-	// }
+// 	// 1. Get bill status and metadata in a single query, and lock the row for update.
+// 	var status model.BillStatus
+// 	var currentMetadataJSON []byte
+// 	err = db.QueryRow(ctx, "SELECT status, metadata FROM bills WHERE bill_id = $1 FOR UPDATE", billID).Scan(&status, &currentMetadataJSON)
+// 	if err != nil {
+// 		if errors.Is(err, sql.ErrNoRows) {
+// 			return ErrBillNotFound
+// 		}
+// 		return fmt.Errorf("failed to get bill status: %w", err)
+// 	}
 
-	// if status == model.BillStatusClosed {
-	// 	return ErrBillIsClosed
-	// }
+// 	if status == model.BillStatusClosed {
+// 		return ErrBillIsClosed
+// 	}
 
-	// 2. Insert the line item
-	// metadataBytes, err := json.Marshal(metadata)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to marshal line item metadata: %w", err)
-	// }
-	// _, err = db.Exec(ctx, `
-	// 	INSERT INTO line_items (bill_id, currency, amount, metadata)
-	// 	VALUES ($1, $2, $3, $4)
-	// `, billID, currency, amount, metadataBytes)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to insert line item: %w", err)
-	// }
+// 	// 2. Insert the line item
+// 	metadataBytes, err := json.Marshal(metadata)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to marshal line item metadata: %w", err)
+// 	}
+// 	_, err = db.Exec(ctx, `
+// 		INSERT INTO line_items (bill_id, currency, amount, metadata)
+// 		VALUES ($1, $2, $3, $4)
+// 	`, billID, currency, amount, metadataBytes)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to insert line item: %w", err)
+// 	}
 
-	// 3. Update the bill's total amount in the metadata
-	// var billMetadata model.BillMetadata
-	// if len(currentMetadataJSON) > 0 {
-	// 	if err := json.Unmarshal(currentMetadataJSON, &billMetadata); err != nil {
-	// 		return fmt.Errorf("failed to unmarshal current metadata for update: %w", err)
-	// 	}
-	// }
-	// if billMetadata.TotalAmounts == nil {
-	// 	billMetadata.TotalAmounts = make(map[string]int64)
-	// }
-	// billMetadata.TotalAmounts[currency] += amount
+// 	// 3. Update the bill's total amount in the metadata
+// 	var billMetadata model.BillMetadata
+// 	if len(currentMetadataJSON) > 0 {
+// 		if err := json.Unmarshal(currentMetadataJSON, &billMetadata); err != nil {
+// 			return fmt.Errorf("failed to unmarshal current metadata for update: %w", err)
+// 		}
+// 	}
+// 	if billMetadata.TotalAmounts == nil {
+// 		billMetadata.TotalAmounts = make(map[string]int64)
+// 	}
+// 	billMetadata.TotalAmounts[currency] += amount
 
-	// updatedMetadataJSON, err := json.Marshal(billMetadata)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to marshal updated metadata for update: %w", err)
-	// }
-	// _, err = tx.Exec(ctx, `
-	// 	UPDATE bills
-	// 	SET metadata = $2
-	// 	WHERE bill_id = $1
-	// `, billID, updatedMetadataJSON)
-	// if err != nil {
-	// 	return fmt.Errorf("failed to update bill metadata: %w", err)
-	// }
+// 	updatedMetadataJSON, err := json.Marshal(billMetadata)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to marshal updated metadata for update: %w", err)
+// 	}
+// 	_, err = tx.Exec(ctx, `
+// 		UPDATE bills
+// 		SET metadata = $2
+// 		WHERE bill_id = $1
+// 	`, billID, updatedMetadataJSON)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to update bill metadata: %w", err)
+// 	}
 
-	// if err := tx.Commit(); err != nil {
-	// 	return fmt.Errorf("commit failed: %w", err)
-	// }
+// 	if err := tx.Commit(); err != nil {
+// 		return fmt.Errorf("commit failed: %w", err)
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
