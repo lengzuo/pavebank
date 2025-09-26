@@ -12,19 +12,17 @@ import (
 )
 
 var (
-	envName             = encore.Meta().Environment.Name
-	BillCycleTaskQueue  = envName + "bill3-lifecycle"
-	ClosedBillTaskQueue = envName + "closed-bill-lifecycle"
+	envName                   = encore.Meta().Environment.Name
+	BillCycleTaskQueue        = envName + "bill3-lifecycle"
+	ClosedBillTaskQueue       = envName + "closed-bill-lifecycle"
+	startToCloseTimeout       = 1 * time.Minute
+	maxRetryAttempt     int32 = 10
+	QueryBillTotal            = "GET_BILL_TOTAL"
 )
 
 const (
 	AddLineItemSignal = "add-line-item"
 	CloseBillSignal   = "close-bill"
-)
-
-var (
-	startToCloseTimeout       = 1 * time.Minute
-	maxRetryAttempt     int32 = 10
 )
 
 type BillState struct {
@@ -54,6 +52,15 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 	state := BillState{
 		BillID: req.BillID,
 		Totals: make(map[string]int64),
+	}
+
+	// Create a query handler for API to query the current total bills before bills is closed
+	err := workflow.SetQueryHandler(ctx, QueryBillTotal, func() (map[string]int64, error) {
+		return state.Totals, nil
+	})
+	if err != nil {
+		workflow.GetLogger(ctx).Error("Failed to register query bill total handler", "error", err)
+		return nil, err
 	}
 
 	// Setup channels for signals and timer
@@ -124,7 +131,7 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 
 	// After the billDetail is closed, get the final billDetail.
 	var billDetail model.BillDetail
-	err := workflow.ExecuteActivity(ctx, activities.GetBillDetail, req.BillID).Get(ctx, &billDetail)
+	err = workflow.ExecuteActivity(ctx, activities.GetBillDetail, req.BillID).Get(ctx, &billDetail)
 	if err != nil {
 		workflow.GetLogger(ctx).Error("Failed to get final bill summary, failing workflow.", "Error", err, "BillID", req.BillID)
 		return nil, err

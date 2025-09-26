@@ -6,6 +6,7 @@ import (
 
 	"encore.app/fee/dao"
 	"encore.app/fee/model"
+	temporal "encore.app/fee/workflow"
 	"encore.dev/rlog"
 )
 
@@ -37,14 +38,10 @@ type GetBillsParams struct {
 
 //encore:api public method=GET path=/bills
 func (s *Service) GetBills(ctx context.Context, params *GetBillsParams) (*GetBillsResponse, error) {
-	var status model.BillStatus
-	if params.Status != "" {
-		var err error
-		status, err = model.ToBillStatus(params.Status)
-		if err != nil {
-			rlog.Error("invalid status", "error", err)
-			return nil, err
-		}
+	status, err := model.ToBillStatus(params.Status)
+	if err != nil {
+		rlog.Error("invalid status", "error", err)
+		return nil, err
 	}
 
 	if params.Limit == 0 {
@@ -76,6 +73,29 @@ func (s *Service) GetBills(ctx context.Context, params *GetBillsParams) (*GetBil
 			PolicyType: bill.PolicyType,
 			CreatedAt:  bill.CreatedAt,
 			ClosedAt:   bill.ClosedAt,
+		}
+		// Query from temporal state if bills is still open
+		if bill.Status == string(model.BillStatusOpen) {
+			workflowID := "bill-" + bill.BillID
+			queryResult, err := s.client.QueryWorkflow(ctx, workflowID, "", temporal.QueryBillTotal)
+			if err != nil {
+				rlog.Error("failed to query workflow for live totals", "error", err, "bill_id", bill.BillID)
+				resp.Bills[i].TotalCharges = []TotalSummary{}
+			}
+			var totals map[string]int64
+			if err := queryResult.Get(&totals); err != nil {
+				rlog.Error("failed to decode workflow query bill total", "error", err, "bill_id", bill.BillID)
+				continue
+			}
+			resp.Bills[i].TotalCharges = make([]TotalSummary, 0, len(totals))
+			for currency, amount := range totals {
+				resp.Bills[i].TotalCharges = append(resp.Bills[i].TotalCharges, TotalSummary{
+					Currency:      currency,
+					TotalAmount:   amount,
+					DisplayAmount: model.FormatAmount(amount),
+				})
+			}
+			continue
 		}
 		resp.Bills[i].TotalCharges = make([]TotalSummary, len(bill.TotalCharges))
 		for j, total := range bill.TotalCharges {
