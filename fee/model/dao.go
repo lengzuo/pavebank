@@ -116,12 +116,12 @@ type TotalSummary struct {
 	DisplayAmount string `json:"display_amount"`
 }
 
-type BillSummary struct {
-	BillID     string     `json:"bill_id"`
-	Status     string     `json:"status"`
-	PolicyType string     `json:"policy_type"`
-	CreatedAt  time.Time  `json:"created_at"`
-	ClosedAt   *time.Time `json:"closed_at,omitempty"`
-	// LineItems    []LineItemSummary `json:"line_items"`
-	TotalCharges []TotalSummary `json:"total_charges"`
+type BillDetail struct {
+	BillID       string            `json:"bill_id"`
+	Status       string            `json:"status"`
+	PolicyType   string            `json:"policy_type"`
+	CreatedAt    time.Time         `json:"created_at"`
+	ClosedAt     *time.Time        `json:"closed_at,omitempty"`
+	LineItems    []LineItemSummary `json:"line_items"`
+	TotalCharges []TotalSummary    `json:"total_charges"`
 }

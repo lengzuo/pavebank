@@ -14,7 +14,6 @@ import (
 
 type CreateBillParams struct {
 	BillID           string    `json:"bill_id"`
-	FeePolicyType    string    `json:"fee_policy_type"`
 	BillingPeriodEnd time.Time `json:"billing_period_end"` // eg: 2025-09-25T21:25:00+08:00
 	IdempotencyKey   string    `header:"X-Idempotency-Key"`
 }
@@ -26,15 +25,12 @@ type CreateBillResponse struct {
 
 //encore:api public method=POST path=/bills tag:idempotency
 func (s *Service) CreateBill(ctx context.Context, params *CreateBillParams) (*CreateBillResponse, error) {
-	policyType, err := model.ToPolicyType(params.FeePolicyType)
-	if err != nil {
-		rlog.Error("failed to create bill policy type is mandatory", "error", err, "bill_id", params.BillID)
+	if params.BillID == "" {
 		return nil, &errs.Error{
 			Code:    errs.InvalidArgument,
-			Message: err.Error(),
+			Message: "bill_id is a required field",
 		}
 	}
-
 	if params.BillingPeriodEnd.IsZero() {
 		return nil, &errs.Error{
 			Code:    errs.InvalidArgument,
@@ -44,13 +40,13 @@ func (s *Service) CreateBill(ctx context.Context, params *CreateBillParams) (*Cr
 
 	req := &temporal.BillLifecycleWorkflowRequest{
 		BillID:           params.BillID,
-		PolicyType:       policyType,
+		PolicyType:       model.PolicyTypeUsageBased,
 		BillingPeriodEnd: params.BillingPeriodEnd,
 	}
 
-	_, err = s.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	_, err := s.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        "bill-" + params.BillID,
-		TaskQueue: billCycleTaskQueue,
+		TaskQueue: temporal.BillCycleTaskQueue,
 	}, temporal.BillLifecycleWorkflow, req)
 	if err != nil {
 		rlog.Error("failed to start bill lifecycle workflow after successful DB insert", "error", err, "bill_id", params.BillID)

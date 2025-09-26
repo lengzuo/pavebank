@@ -2,7 +2,6 @@ package fee
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"encore.app/fee/model"
@@ -43,7 +42,7 @@ func StartMonthlyBilling(ctx context.Context) error {
 	billingPeriodEnd := startOfNextMonth.Add(-1 * time.Second)
 
 	for _, customerID := range customerIDs {
-		workflowID := fmt.Sprintf("bill-%s", customerID)
+		workflowID := temporal.BillCycleWorkflowID(customerID)
 
 		req := &temporal.BillLifecycleWorkflowRequest{
 			BillID:           customerID,
@@ -54,7 +53,7 @@ func StartMonthlyBilling(ctx context.Context) error {
 		// Start the workflow.
 		_, err := s.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 			ID:        workflowID,
-			TaskQueue: billCycleTaskQueue,
+			TaskQueue: temporal.BillCycleTaskQueue,
 		}, temporal.BillLifecycleWorkflow, req)
 		if err != nil {
 			rlog.Error("failed to start bill lifecycle workflow", "error", err, "customer_id", customerID)

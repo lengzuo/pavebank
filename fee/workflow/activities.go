@@ -18,16 +18,9 @@ const (
 type Activities struct{}
 
 func (a *Activities) AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata) error {
-	err := dao.AddLineItemTx(ctx, billID, currency, amount, metadata)
+	err := dao.AddLineItem(ctx, billID, currency, amount, metadata)
 	if err != nil {
-		if errors.Is(err, dao.ErrBillNotFound) {
-			return temporal.NewNonRetryableApplicationError(err.Error(), billNotFound, err)
-		}
-		if errors.Is(err, dao.ErrBillIsClosed) {
-			return temporal.NewNonRetryableApplicationError(err.Error(), billClosed, err)
-		}
-		// For any other error, let Temporal's retry policy handle it.
-		return fmt.Errorf("failed to add line item transactionally: %w", err)
+		return fmt.Errorf("failed to add line item: %s", err)
 	}
 	return nil
 }
@@ -36,47 +29,36 @@ func (a *Activities) CreateBill(ctx context.Context, billID string, policyType m
 	return dao.CreateBill(ctx, billID, string(policyType))
 }
 
-func (a *Activities) CloseBill(ctx context.Context, billID string) error {
-	// Update the bill status
-	err := dao.CloseBill(ctx, billID)
-	// TODO: Generate PDF invoice using html2pdf
-	err = a.GeneratePDFInvoive(ctx, billID)
-	// TODO: Create payment link
-	err = a.CreatePaymentLink(ctx, billID)
-	// TODO: Email the PDF to client using sendgrid.
-	err = a.SendBillEmail(ctx, billID)
+// func (a *Activities) CloseBill(ctx context.Context, billID string) error {
+// 	// Update the bill status
+// 	err := dao.CloseBill(ctx, billID)
+// 	// TODO: Generate PDF invoice using html2pdf
+// 	err = a.GeneratePDFInvoive(ctx, billID)
+// 	// TODO: Create payment link
+// 	err = a.CreatePaymentLink(ctx, billID)
+// 	// TODO: Email the PDF to client using sendgrid.
+// 	err = a.SendBillEmail(ctx, billID)
+// 	return err
+// }
+
+func (a *Activities) CloseBillFromState(ctx context.Context, state BillState) error {
+	billMetadata := model.BillMetadata{
+		TotalAmounts: state.Totals,
+	}
+	err := dao.CloseBill(ctx, state.BillID, billMetadata)
 	return err
 }
 
-func (a *Activities) GetBill(ctx context.Context, billID, userID string) (*model.Bill, error) {
-	return dao.GetBill(ctx, billID)
-}
-
-func (a *Activities) GetBillSummary(ctx context.Context, billID string) (*model.BillSummary, error) {
-	// First, get the basic bill details
-	var billSummary model.BillSummary
-	billHeader, err := dao.GetBill(ctx, billID)
+func (a *Activities) GetBillDetail(ctx context.Context, billID string) (*model.BillDetail, error) {
+	var billDetail *model.BillDetail
+	billDetail, err := dao.GetBill(ctx, billID)
 	if err != nil {
 		if errors.Is(err, errors.New("bill not found")) {
-			return nil, temporal.NewNonRetryableApplicationError("bill not found", "BillNotFoundError", err)
+			return nil, temporal.NewNonRetryableApplicationError("bill not found", billNotFound, err)
 		}
 		return nil, fmt.Errorf("failed to get bill header: %w", err)
 	}
-
-	billSummary.BillID = billHeader.BillID
-	billSummary.PolicyType = billHeader.PolicyType
-	billSummary.Status = billHeader.Status
-	billSummary.CreatedAt = billHeader.CreatedAt
-	billSummary.ClosedAt = billHeader.ClosedAt
-
-	// Get bill totals
-	totalCharges, err := dao.GetBillTotalsForBill(ctx, billID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get bill totals: %w", err)
-	}
-	billSummary.TotalCharges = totalCharges
-
-	return &billSummary, nil
+	return billDetail, nil
 }
 
 func (a *Activities) GeneratePDFInvoive(ctx context.Context, billID string) error {

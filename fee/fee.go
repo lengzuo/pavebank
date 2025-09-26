@@ -5,20 +5,14 @@ import (
 	"fmt"
 
 	temporal "encore.app/fee/workflow"
-	"encore.dev"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 )
 
-var (
-	envName            = encore.Meta().Environment.Name
-	billCycleTaskQueue = envName + "bill3-lifecycle"
-)
-
 //encore:service
 type Service struct {
-	client client.Client
-	worker worker.Worker
+	client  client.Client
+	workers []worker.Worker
 }
 
 func initService() (*Service, error) {
@@ -33,20 +27,32 @@ func initService() (*Service, error) {
 	}
 
 	// Initialize and start the worker using the created client
-	w := worker.New(tc, billCycleTaskQueue, worker.Options{})
-
-	w.RegisterWorkflow(temporal.BillLifecycleWorkflow)
-	w.RegisterActivity(&temporal.Activities{})
-
-	err = w.Start()
+	billCycleWorker := worker.New(tc, temporal.BillCycleTaskQueue, worker.Options{})
+	billCycleWorker.RegisterWorkflow(temporal.BillLifecycleWorkflow)
+	billCycleWorker.RegisterActivity(&temporal.Activities{})
+	err = billCycleWorker.Start()
 	if err != nil {
 		tc.Close()
 		return nil, fmt.Errorf("failed to start temporal worker: %v", err)
 	}
-	return &Service{client: tc, worker: w}, nil
+
+	closedBillWorker := worker.New(tc, temporal.ClosedBillTaskQueue, worker.Options{})
+	closedBillWorker.RegisterWorkflow(temporal.ClosedBillPostProcessWorkflow)
+	closedBillWorker.RegisterActivity(&temporal.Activities{})
+	err = closedBillWorker.Start()
+	if err != nil {
+		tc.Close()
+		billCycleWorker.Stop()
+		return nil, fmt.Errorf("failed to start closed bill worker: %v", err)
+	}
+	allWorkers := []worker.Worker{billCycleWorker, closedBillWorker}
+
+	return &Service{client: tc, workers: allWorkers}, nil
 }
 
 func (s *Service) Shutdown(force context.Context) {
 	s.client.Close()
-	s.worker.Stop() // Stop the worker gracefully
+	for _, w := range s.workers {
+		w.Stop()
+	}
 }

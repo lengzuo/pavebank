@@ -49,7 +49,8 @@ func (s *Service) AddLineItem(ctx context.Context, billID string, params *AddLin
 	if params.Description != "" {
 		signal.Metadata = &model.LineItemMetadata{Description: params.Description}
 	}
-	workflowID := "bill-" + billID
+	workflowID := temporal.BillCycleWorkflowID(billID)
+
 	err = s.client.SignalWorkflow(ctx, workflowID, "", temporal.AddLineItemSignal, signal)
 	if err != nil {
 		var notFound *serviceerror.NotFound

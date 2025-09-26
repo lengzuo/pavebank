@@ -10,6 +10,7 @@ import (
 	temporal "encore.app/fee/workflow"
 	"encore.dev/beta/errs"
 	"encore.dev/rlog"
+	"go.temporal.io/api/serviceerror"
 )
 
 type CloseBillParams struct {
@@ -17,7 +18,7 @@ type CloseBillParams struct {
 }
 
 //encore:api public method=POST path=/bills/:billID/close tag:idempotency
-func (s *Service) CloseBill(ctx context.Context, billID string, params *CloseBillParams) (*model.BillSummary, error) {
+func (s *Service) CloseBill(ctx context.Context, billID string, params *CloseBillParams) (*model.BillDetail, error) {
 	if billID == "" {
 		return nil, &errs.Error{
 			Code:    errs.InvalidArgument,
@@ -25,15 +26,16 @@ func (s *Service) CloseBill(ctx context.Context, billID string, params *CloseBil
 		}
 	}
 
-	workflowID := "bill-" + billID
 	signal := temporal.ClosedBillRequest{
 		BillID: billID,
 	}
 
+	workflowID := temporal.BillCycleWorkflowID(billID)
 	// Signal the workflow to close the bill
 	err := s.client.SignalWorkflow(ctx, workflowID, "", temporal.CloseBillSignal, signal)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) || errors.Is(err, sql.ErrNoRows) {
 			return nil, &errs.Error{
 				Code:    errs.NotFound,
 				Message: "bill not found or already closed",
@@ -47,7 +49,7 @@ func (s *Service) CloseBill(ctx context.Context, billID string, params *CloseBil
 	run := s.client.GetWorkflow(ctx, workflowID, "")
 
 	// Wait for the workflow to complete and retrieve the result
-	var billSummary model.BillSummary
+	var billSummary model.BillDetail
 	err = run.Get(ctx, &billSummary)
 	if err != nil {
 		rlog.Error("failed to get workflow result", "error", err, "bill_id", billID)
