@@ -85,6 +85,7 @@ func (s *Service) GetBills(ctx context.Context, params *GetBillsParams) (*GetBil
 			if err != nil {
 				rlog.Error("failed to query workflow for live totals", "error", err, "bill_id", bill.BillID)
 				resp.Bills[i].TotalCharges = []TotalSummary{}
+				continue
 			}
 			var totals map[string]int64
 			if err := queryResult.Get(&totals); err != nil {

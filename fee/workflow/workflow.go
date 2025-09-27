@@ -21,14 +21,16 @@ var (
 )
 
 const (
-	AddLineItemSignal    = "add-line-item"
-	UpdateLineItemSignal = "update-line-item"
-	CloseBillSignal      = "close-bill"
+	AddLineItemSignal           = "add-line-item"
+	UpdateLineItemSignal        = "update-line-item"
+	CloseBillSignal             = "close-bill"
+	ContinueAsNewEventThreshold = 500
 )
 
 type BillState struct {
-	Totals map[string]int64
-	BillID string
+	Totals     map[string]int64
+	BillID     string
+	EventCount int
 }
 
 // BillLifecycleWorkflow
@@ -42,17 +44,25 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 	var activities *Activities
+	var state BillState
+	if req.PreviousState != nil {
+		// This is a continued run, so restore state from the previous session.
+		state = *req.PreviousState
+		workflow.GetLogger(ctx).Info("Continuing workflow from previous state.", "BillID", req.BillID, "EventCount", state.EventCount)
+	} else {
+		// This is the first run of the workflow.
+		// 1. Create bill entry in the database first.
+		if err := workflow.ExecuteActivity(ctx, activities.CreateBill, req.BillID, req.PolicyType).Get(ctx, nil); err != nil {
+			workflow.GetLogger(ctx).Error("Failed to create bill in database, failing workflow", "error", err, "bill_id", req.BillID)
+			return nil, err
+		}
 
-	// 1. Create bill entry in the database first
-	if err := workflow.ExecuteActivity(ctx, activities.CreateBill, req.BillID, req.PolicyType).Get(ctx, nil); err != nil {
-		workflow.GetLogger(ctx).Error("Failed to create bill in database, failing workflow", "error", err, "bill_id", req.BillID)
-		return nil, err
-	}
-
-	// State as the bill allows for the progressive accrual of fees per currency
-	state := BillState{
-		BillID: req.BillID,
-		Totals: make(map[string]int64),
+		// State as the bill allows for the progressive accrual of fees per currency.
+		state = BillState{
+			BillID:     req.BillID,
+			Totals:     make(map[string]int64),
+			EventCount: 0,
+		}
 	}
 
 	// Create a query handler for API to query the current total bills before bills is closed
@@ -76,13 +86,14 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 	timerFuture := workflow.NewTimer(timerCtx, durationUntilEnd)
 
 	workflowCompleted := false
-	for !workflowCompleted {
+	for {
 		selector := workflow.NewSelector(ctx)
 
 		// Listen for AddLineItem signals
 		selector.AddReceive(addItemSignalChan, func(c workflow.ReceiveChannel, more bool) {
 			var signal AddLineItemSignalRequest
 			c.Receive(ctx, &signal)
+			state.EventCount++ // Increment event counter
 
 			err := workflow.ExecuteActivity(ctx, activities.AddLineItem, signal.BillID, signal.Currency, signal.Amount, signal.Metadata, signal.LineItemID).Get(ctx, nil)
 			if err != nil {
@@ -99,6 +110,7 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 		selector.AddReceive(updateItemSignalChan, func(c workflow.ReceiveChannel, more bool) {
 			var signal UpdateLineItemSignalRequest
 			c.Receive(ctx, &signal)
+			state.EventCount++ // Increment event counter
 
 			var lineItem *model.LineItem
 			err := workflow.ExecuteActivity(ctx, activities.UpdateLineItem, signal.BillID, signal.LineItemID, signal.Status).Get(ctx, &lineItem)
@@ -126,6 +138,19 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 		})
 
 		selector.Select(ctx)
+
+		// If the workflow is marked for completion (by signal or timer), break the loop.
+		// This must be checked *before* the ContinueAsNew condition.
+		if workflowCompleted {
+			break
+		}
+
+		// Check if the event threshold has been reached to continue as new
+		if state.EventCount >= ContinueAsNewEventThreshold {
+			workflow.GetLogger(ctx).Info("Event threshold reached, continuing as new.", "EventCount", state.EventCount)
+			req.PreviousState = &state
+			return nil, workflow.NewContinueAsNewError(ctx, BillLifecycleWorkflow, req)
+		}
 	}
 
 	// If the workflow is completing before the timer fired (e.g. via manual close from API), cancel the timer.

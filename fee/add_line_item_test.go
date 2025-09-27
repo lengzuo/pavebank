@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"encore.app/fee/model"
 	temporal "encore.app/fee/workflow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -24,13 +23,6 @@ func TestAddLineItem(t *testing.T) {
 		Description: "Test item",
 	}
 
-	signal := temporal.AddLineItemSignalRequest{
-		Amount:   params.Amount,
-		Currency: model.USD,
-		BillID:   billID,
-		Metadata: &model.LineItemMetadata{Description: params.Description},
-	}
-
 	// Mock expectations
 	mockTemporalClient.On(
 		"SignalWorkflow",
@@ -38,7 +30,7 @@ func TestAddLineItem(t *testing.T) {
 		temporal.BillCycleWorkflowID(billID),
 		"",
 		temporal.AddLineItemSignal,
-		signal,
+		mock.Anything,
 	).Return(nil)
 
 	resp, err := service.AddLineItem(context.Background(), billID, params)

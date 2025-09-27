@@ -10,6 +10,7 @@ type BillLifecycleWorkflowRequest struct {
 	BillID           string
 	PolicyType       model.PolicyType
 	BillingPeriodEnd time.Time
+	PreviousState    *BillState
 }
 
 type BillClosedPostProcessWorkflowRequest struct {
