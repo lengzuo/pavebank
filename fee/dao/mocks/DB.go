@@ -279,6 +279,34 @@ func (_m *DB) IsBillExists(ctx context.Context, billID string) (bool, error) {
 	return r0, r1
 }
 
+// IsLineItemExists provides a mock function with given fields: ctx, billID, lineItemID, status
+func (_m *DB) IsLineItemExists(ctx context.Context, billID string, lineItemID string, status string) (bool, error) {
+	ret := _m.Called(ctx, billID, lineItemID, status)
+
+	if len(ret) == 0 {
+		panic("no return value specified for IsLineItemExists")
+	}
+
+	var r0 bool
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) (bool, error)); ok {
+		return rf(ctx, billID, lineItemID, status)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) bool); ok {
+		r0 = rf(ctx, billID, lineItemID, status)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
+		r1 = rf(ctx, billID, lineItemID, status)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // UpdateBillTotal provides a mock function with given fields: ctx, billID, currency, amount
 func (_m *DB) UpdateBillTotal(ctx context.Context, billID string, currency string, amount int64) error {
 	ret := _m.Called(ctx, billID, currency, amount)

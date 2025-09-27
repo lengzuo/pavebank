@@ -12,6 +12,7 @@ import (
 	"encore.app/fee/model"
 	"encore.dev/rlog"
 	"encore.dev/storage/sqldb"
+	"github.com/jackc/pgx/v5"
 )
 
 var (
@@ -310,18 +311,17 @@ func (d *dbStore) UpdateLineItem(ctx context.Context, billID, lineItemID string,
 	err := d.db.QueryRow(ctx, `
 		UPDATE line_items li
 		SET status = $1,
-    		updated_at = now()
+			updated_at = now()
 		WHERE li.line_item_id = $2
-  		AND li.bill_id = $3
-  		AND EXISTS (
-      		SELECT 1
-      		FROM bills b
-      		WHERE b.bill_id = li.bill_id
-        		AND b.status = 'OPEN'
-  		)
+		AND li.bill_id = $3
+		AND li.status = 'ACTIVE' 
 		RETURNING li.currency, li.amount;
 	`, status, lineItemID, billID).Scan(&lineItem.Currency, &lineItem.Amount)
+
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("failed to update line item: %w", err)
 	}
 	return &lineItem, nil
@@ -335,6 +335,24 @@ func (d *dbStore) IsBillExists(ctx context.Context, billID string) (bool, error)
 	if err != nil && err != sql.ErrNoRows {
 		rlog.Error("failed to check if bill exists", "error", err, "bill_id", billID)
 		return false, err
+	}
+	return exists, nil
+}
+
+// IsLineItemExists checks if a specific line item exists with a given status.
+func (d *dbStore) IsLineItemExists(ctx context.Context, billID, lineItemID, status string) (bool, error) {
+	var exists bool
+	query := `
+		SELECT EXISTS (
+			SELECT 1
+			FROM line_items
+			WHERE line_item_id = $1
+			  AND bill_id = $2
+			  AND status = $3
+		)`
+	err := d.db.QueryRow(ctx, query, lineItemID, billID, status).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check for line item: %w", err)
 	}
 	return exists, nil
 }

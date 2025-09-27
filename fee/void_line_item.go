@@ -19,6 +19,18 @@ type RemoveLineItemResponse struct {
 
 //encore:api public method=PUT path=/bills/:billID/line-items/:lineItemID/void tag:idempotency
 func (s *Service) VoidLineItem(ctx context.Context, billID, lineItemID string) (*RemoveLineItemResponse, error) {
+	exits, err := s.db.IsLineItemExists(ctx, billID, lineItemID, string(model.LineItemStatusActive))
+	if err != nil {
+		rlog.Error("failed to check is line item exists", "error", err)
+		return nil, err
+	}
+	if !exits {
+		return nil, &errs.Error{
+			Code:    errs.NotFound,
+			Message: "line item not found",
+		}
+	}
+
 	signal := temporal.UpdateLineItemSignalRequest{
 		LineItemID: lineItemID,
 		BillID:     billID,
@@ -26,7 +38,7 @@ func (s *Service) VoidLineItem(ctx context.Context, billID, lineItemID string) (
 	}
 	workflowID := temporal.BillCycleWorkflowID(billID)
 
-	err := s.client.SignalWorkflow(ctx, workflowID, "", temporal.UpdateLineItemSignal, signal)
+	err = s.client.SignalWorkflow(ctx, workflowID, "", temporal.UpdateLineItemSignal, signal)
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) || errors.Is(err, sql.ErrNoRows) {

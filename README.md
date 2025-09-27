@@ -71,7 +71,7 @@ curl -X POST http://localhost:4000/bills \
 -H "X-Idempotency-Key: $(uuidgen)" \
 -d '{
   "bill_id": "project-xyz-usage",
-  "billing_period_end": "'$(date -v+10M +%Y-%m-%dT%H:%M:%SZ)'"
+  "billing_period_end": "2025-09-26T21:25:00+08:00"
 }'
 ```
 
@@ -107,6 +107,26 @@ curl -X POST http://localhost:4000/bills/project-xyz-usage/line-items \
 - This sends an `AddLineItem` signal to the running workflow.
 - The workflow executes an activity that inserts the line item into the database. A unique `uid` is generated for this insertion to provide database-level idempotency.
 - If the insertion is successful, the workflow updates its internal in-memory total for that currency.
+
+### Void a Line Item
+
+Voids a specific line item from an open bill, effectively removing its amount from the total.
+
+**Endpoint:** `PUT /bills/{billID}/line-items/{lineItemID}/void`
+
+**`curl` Example:**
+
+```bash
+# Replace {lineItemID} with an actual ID from a previously added line item
+curl -X PUT http://localhost:4000/bills/project-xyz-usage/line-items/{lineItemID}/void \
+-H "X-Idempotency-Key: $(uuidgen)"
+```
+
+**How it Works:**
+
+- The API sends an `UpdateLineItem` signal to the running `BillLifecycleWorkflow`.
+- The workflow triggers an `UpdateLineItem` activity. This activity changes the line item's `status` to `voided` in the database and returns the full line item object.
+- Upon successful completion of the activity, the workflow subtracts the `amount` of the voided line item from its in-memory `Totals` map for the corresponding `currency`. This ensures the live, queryable total is immediately corrected.
 
 ### Manually Close a Bill
 

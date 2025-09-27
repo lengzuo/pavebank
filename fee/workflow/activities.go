@@ -7,11 +7,11 @@ import (
 
 	"encore.app/fee/dao"
 	"encore.app/fee/model"
+	"go.temporal.io/sdk/temporal"
 )
 
 const (
-	billClosed   = "BillClosedError"
-	billNotFound = "BillNotFoundError"
+	errNotFound = "NotFound"
 )
 
 type Activities struct {
@@ -33,7 +33,7 @@ func (a *Activities) AddLineItem(ctx context.Context, billID, currency string, a
 func (a *Activities) UpdateLineItem(ctx context.Context, billID, lineItemID, status string) (*model.LineItem, error) {
 	lineItem, err := a.db.UpdateLineItem(ctx, billID, lineItemID, status)
 	if err != nil {
-		return nil, fmt.Errorf("failed to add line item: %s", err)
+		return nil, temporal.NewNonRetryableApplicationError("failed in update line item", errNotFound, err)
 	}
 	return lineItem, nil
 }

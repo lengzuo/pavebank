@@ -39,7 +39,7 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 		StartToCloseTimeout: startToCloseTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts:        maxRetryAttempt,
-			NonRetryableErrorTypes: []string{billNotFound, billClosed},
+			NonRetryableErrorTypes: []string{errNotFound},
 		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
@@ -110,14 +110,14 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 		selector.AddReceive(updateItemSignalChan, func(c workflow.ReceiveChannel, more bool) {
 			var signal UpdateLineItemSignalRequest
 			c.Receive(ctx, &signal)
-			state.EventCount++ // Increment event counter
+			state.EventCount++
 
 			var lineItem *model.LineItem
 			err := workflow.ExecuteActivity(ctx, activities.UpdateLineItem, signal.BillID, signal.LineItemID, signal.Status).Get(ctx, &lineItem)
 			if err != nil {
 				workflow.GetLogger(ctx).Error("Failed to update line item.", "Error", err, "BillID", signal.BillID, "LineItemID", signal.LineItemID)
 			} else {
-				workflow.GetLogger(ctx).Debug("Updae bill totals.", "LineItemID", signal.LineItemID)
+				workflow.GetLogger(ctx).Debug("Update bill totals.", "LineItemID", signal.LineItemID)
 				state.Totals[lineItem.Currency] -= lineItem.Amount
 			}
 		})
