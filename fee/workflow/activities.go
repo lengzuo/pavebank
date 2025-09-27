@@ -22,12 +22,20 @@ func NewActivity(db dao.DB) *Activities {
 	return &Activities{db: db}
 }
 
-func (a *Activities) AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata, uid string) error {
-	err := a.db.AddLineItem(ctx, billID, currency, amount, metadata, uid)
+func (a *Activities) AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata, lineItemID string) error {
+	err := a.db.AddLineItem(ctx, billID, currency, amount, metadata, lineItemID)
 	if err != nil {
 		return fmt.Errorf("failed to add line item: %s", err)
 	}
 	return nil
+}
+
+func (a *Activities) UpdateLineItem(ctx context.Context, billID, lineItemID, status string) (*model.LineItem, error) {
+	lineItem, err := a.db.UpdateLineItem(ctx, billID, lineItemID, status)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add line item: %s", err)
+	}
+	return lineItem, nil
 }
 
 func (a *Activities) CreateBill(ctx context.Context, billID string, policyType model.PolicyType) error {
@@ -70,11 +78,13 @@ func (a *Activities) GetBillDetail(ctx context.Context, billID string) (*BillRes
 			return nil, err
 		}
 		resp.LineItems = append(resp.LineItems, LineItem{
+			LineItemID:    item.LineItemID,
 			Currency:      item.Currency,
 			Amount:        item.Amount,
 			Description:   metadata.Description,
 			CreatedAt:     item.CreatedAt,
 			DisplayAmount: model.FormatAmount(item.Amount),
+			Status:        item.Status,
 		})
 	}
 

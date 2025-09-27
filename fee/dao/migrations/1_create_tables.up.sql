@@ -19,13 +19,15 @@ CREATE INDEX idx_bills_status_created_at_desc ON bills (status, created_at DESC)
 --
 CREATE TABLE IF NOT EXISTS line_items (
     id SERIAL PRIMARY KEY,
-    uid VARCHAR(64) NOT NULL,
+    line_item_id VARCHAR(64) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
     bill_id VARCHAR(64) NOT NULL,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     currency CHAR(3) NOT NULL,
     amount BIGINT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE(uid)
+    updated_at TIMESTAMPTZ NOT NULL,
+    UNIQUE(line_item_id)
 );
 CREATE INDEX idx_bill_id ON line_items (bill_id);
 CREATE INDEX idx_line_item_created_at_desc ON line_items (created_at DESC);

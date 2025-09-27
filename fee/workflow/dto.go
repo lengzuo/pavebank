@@ -16,10 +16,17 @@ type BillClosedPostProcessWorkflowRequest struct {
 	BillID string
 }
 type AddLineItemSignalRequest struct {
-	Amount   int64
-	Currency model.Currency
-	BillID   string
-	Metadata *model.LineItemMetadata
+	LineItemID string
+	Amount     int64
+	Currency   model.Currency
+	BillID     string
+	Metadata   *model.LineItemMetadata
+}
+
+type UpdateLineItemSignalRequest struct {
+	LineItemID string
+	BillID     string
+	Status     model.LineItemStatus
 }
 
 type ClosedBillRequest struct {
@@ -33,11 +40,13 @@ type TotalSummary struct {
 }
 
 type LineItem struct {
+	LineItemID    string    `json:"line_item_id"`
 	Currency      string    `json:"currency"`
 	Amount        int64     `json:"amount"`
 	Description   string    `json:"description"`
 	CreatedAt     time.Time `json:"created_at"`
 	DisplayAmount string    `json:"display_amount"`
+	Status        string    `json:"status"`
 }
 
 type BillResponse struct {

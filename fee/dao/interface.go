@@ -17,7 +17,8 @@ type DB interface {
 	GetLineItemsForBill(ctx context.Context, billID string) ([]model.LineItem, error)
 	GetBills(ctx context.Context, status model.BillStatus, limit int, cursor time.Time) ([]*model.BillDetail, bool, error)
 	GetBillIDs(ctx context.Context, status model.BillStatus, policyType model.PolicyType, limit int, cursor time.Time) ([]string, bool, error)
-	AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata, uid string) error
+	AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata, lineItemID string) error
+	UpdateLineItem(ctx context.Context, billID, lineItemID, status string) (*model.LineItem, error)
 	IsBillExists(ctx context.Context, billID string) (bool, error)
 }
 

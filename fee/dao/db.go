@@ -179,7 +179,7 @@ func (d *dbStore) GetBill(ctx context.Context, billID string) (*model.BillDetail
 // GetLineItemsForBill retrieves all line items for a given bill.
 func (d *dbStore) GetLineItemsForBill(ctx context.Context, billID string) ([]model.LineItem, error) {
 	rows, err := d.db.Query(ctx, `
-		SELECT currency, amount, metadata, created_at
+		SELECT currency, amount, metadata, created_at, status, line_item_id
 		FROM line_items
 		WHERE bill_id = $1
 		ORDER BY created_at DESC
@@ -192,7 +192,7 @@ func (d *dbStore) GetLineItemsForBill(ctx context.Context, billID string) ([]mod
 	var lineItems []model.LineItem
 	for rows.Next() {
 		var item model.LineItem
-		if err := rows.Scan(&item.Currency, &item.Amount, &item.Metadata, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.Currency, &item.Amount, &item.Metadata, &item.CreatedAt, &item.Status, &item.LineItemID); err != nil {
 			return nil, err
 		}
 		lineItems = append(lineItems, item)
@@ -289,20 +289,42 @@ func (d *dbStore) GetBillIDs(ctx context.Context, status model.BillStatus, polic
 	return billIDs, hasMore, nil
 }
 
-func (d *dbStore) AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata, uid string) error {
+func (d *dbStore) AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata, lineItemID string) error {
 	metadataBytes, err := json.Marshal(metadata)
 	if err != nil {
 		return fmt.Errorf("failed to marshal line item metadata: %w", err)
 	}
 	_, err = d.db.Exec(ctx, `
-		INSERT INTO line_items (bill_id, currency, amount, metadata, uid)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (uid) DO NOTHING;
-	`, billID, currency, amount, metadataBytes, uid)
+		INSERT INTO line_items (bill_id, currency, amount, metadata, line_item_id, updated_at)
+		VALUES ($1, $2, $3, $4, $5, now())
+		ON CONFLICT (line_item_id) DO NOTHING;
+	`, billID, currency, amount, metadataBytes, lineItemID)
 	if err != nil {
 		return fmt.Errorf("failed to insert line item: %w", err)
 	}
 	return nil
+}
+
+func (d *dbStore) UpdateLineItem(ctx context.Context, billID, lineItemID string, status string) (*model.LineItem, error) {
+	var lineItem model.LineItem
+	err := d.db.QueryRow(ctx, `
+		UPDATE line_items li
+		SET status = $1,
+    		updated_at = now()
+		WHERE li.line_item_id = $2
+  		AND li.bill_id = $3
+  		AND EXISTS (
+      		SELECT 1
+      		FROM bills b
+      		WHERE b.bill_id = li.bill_id
+        		AND b.status = 'OPEN'
+  		)
+		RETURNING li.currency, li.amount;
+	`, status, lineItemID, billID).Scan(&lineItem.Currency, &lineItem.Amount)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update line item: %w", err)
+	}
+	return &lineItem, nil
 }
 
 // IsBillExists checks if a bill with the given ID exists in the database.

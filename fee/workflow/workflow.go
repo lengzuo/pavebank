@@ -3,6 +3,7 @@ package temporal
 import (
 	"time"
 
+	"encore.app/fee/model"
 	"encore.dev"
 	"encore.dev/rlog"
 	"go.temporal.io/api/enums/v1"
@@ -20,8 +21,9 @@ var (
 )
 
 const (
-	AddLineItemSignal = "add-line-item"
-	CloseBillSignal   = "close-bill"
+	AddLineItemSignal    = "add-line-item"
+	UpdateLineItemSignal = "update-line-item"
+	CloseBillSignal      = "close-bill"
 )
 
 type BillState struct {
@@ -63,7 +65,8 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 	}
 
 	// Setup channels for signals and timer
-	signalChan := workflow.GetSignalChannel(ctx, AddLineItemSignal)
+	addItemSignalChan := workflow.GetSignalChannel(ctx, AddLineItemSignal)
+	updateItemSignalChan := workflow.GetSignalChannel(ctx, UpdateLineItemSignal)
 	closeChan := workflow.GetSignalChannel(ctx, CloseBillSignal)
 
 	// Timer for automatic bill closure
@@ -77,14 +80,11 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 		selector := workflow.NewSelector(ctx)
 
 		// Listen for AddLineItem signals
-		selector.AddReceive(signalChan, func(c workflow.ReceiveChannel, more bool) {
+		selector.AddReceive(addItemSignalChan, func(c workflow.ReceiveChannel, more bool) {
 			var signal AddLineItemSignalRequest
 			c.Receive(ctx, &signal)
 
-			// Idempotency to ensure we only insert one entry if the activity error due to worker crash, network issues, or explicit retry policy
-			idempotencyKey := UUID()
-
-			err := workflow.ExecuteActivity(ctx, activities.AddLineItem, signal.BillID, signal.Currency, signal.Amount, signal.Metadata, idempotencyKey).Get(ctx, nil)
+			err := workflow.ExecuteActivity(ctx, activities.AddLineItem, signal.BillID, signal.Currency, signal.Amount, signal.Metadata, signal.LineItemID).Get(ctx, nil)
 			if err != nil {
 				// If adding a line item fails after retries, log it.
 				// Depending on business requirements, we might want to fail the workflow or send an alert.
@@ -93,6 +93,20 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 			} else {
 				workflow.GetLogger(ctx).Debug("Add line item activity completed.", "BillID", signal.BillID)
 				state.Totals[string(signal.Currency)] += signal.Amount
+			}
+		})
+
+		selector.AddReceive(updateItemSignalChan, func(c workflow.ReceiveChannel, more bool) {
+			var signal UpdateLineItemSignalRequest
+			c.Receive(ctx, &signal)
+
+			var lineItem *model.LineItem
+			err := workflow.ExecuteActivity(ctx, activities.UpdateLineItem, signal.BillID, signal.LineItemID, signal.Status).Get(ctx, &lineItem)
+			if err != nil {
+				workflow.GetLogger(ctx).Error("Failed to update line item.", "Error", err, "BillID", signal.BillID, "LineItemID", signal.LineItemID)
+			} else {
+				workflow.GetLogger(ctx).Debug("Updae bill totals.", "LineItemID", signal.LineItemID)
+				state.Totals[lineItem.Currency] -= lineItem.Amount
 			}
 		})
 

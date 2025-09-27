@@ -38,6 +38,14 @@ func ToBillStatus(s string) (BillStatus, error) {
 	}
 }
 
+// LineItemStatus represents the status of a bill.
+type LineItemStatus string
+
+const (
+	LineItemStatusActive LineItemStatus = "ACTIVE"
+	LineItemStatusVoided LineItemStatus = "VOIDED"
+)
+
 // ToCurrency converts a string to a Currency type, validating it against known currencies.
 // It accepts lowercase inputs and converts them to uppercase for validation.
 func ToCurrency(s string) (Currency, error) {
@@ -97,10 +105,12 @@ type LineItemMetadata struct {
 }
 
 type LineItem struct {
-	Metadata  string    `json:"metadata"`
-	Currency  string    `json:"currency"`
-	Amount    int64     `json:"amount"`
-	CreatedAt time.Time `json:"created_at"`
+	LineItemID string    `json:"line_item_id"`
+	Metadata   string    `json:"metadata"`
+	Currency   string    `json:"currency"`
+	Amount     int64     `json:"amount"`
+	CreatedAt  time.Time `json:"created_at"`
+	Status     string    `json:"status"`
 }
 
 type LineItemSummary struct {

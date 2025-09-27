@@ -20,6 +20,7 @@ type AddLineItemParams struct {
 }
 
 type AddLineItemResponse struct {
+	LineItemID  string `json:"line_item_id"`
 	Amount      int64  `json:"amount"`
 	Currency    string `json:"currency"`
 	BillID      string `json:"bill_id"`
@@ -42,9 +43,10 @@ func (s *Service) AddLineItem(ctx context.Context, billID string, params *AddLin
 		}
 	}
 	signal := temporal.AddLineItemSignalRequest{
-		Amount:   params.Amount,
-		Currency: currency,
-		BillID:   billID,
+		LineItemID: UUID(),
+		Amount:     params.Amount,
+		Currency:   currency,
+		BillID:     billID,
 	}
 	if params.Description != "" {
 		signal.Metadata = &model.LineItemMetadata{Description: params.Description}
@@ -65,6 +67,7 @@ func (s *Service) AddLineItem(ctx context.Context, billID string, params *AddLin
 	}
 
 	return &AddLineItemResponse{
+		LineItemID:  signal.LineItemID,
 		Amount:      params.Amount,
 		Currency:    params.Currency,
 		BillID:      billID,

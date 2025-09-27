@@ -204,3 +204,18 @@ As a production-grade service, the following areas would be the next logical ste
 - The current API endpoints are public. In a real-world scenario, they would need to be protected. This would involve:
   - Implementing an `//encore:api auth` handler.
   - Defining authorization logic (e.g., only an authenticated service or user can add a line item to a bill).
+
+### Credit Notes and Adjustments
+
+- **Problem:** The current system only handles the positive accrual of fees. It does not have a mechanism for issuing credits, handling refunds, or making adjustments to a bill that has already been closed.
+- **Solution:** A robust billing system needs a "Credit Note" workflow. This could be a separate Temporal workflow that is linked to an original bill and applies a negative adjustment. This would involve creating new API endpoints and database tables to track credit operations, ensuring a complete and auditable financial history.
+
+### Audit Trail
+
+- **Problem:** While the database stores the final state and Temporal's history provides a technical trace, there is no dedicated, business-friendly audit trail.
+- **Solution:** Implement a specific `audit_log` table in the database. Every significant event (bill created, line item added, bill closed, credit note issued) would trigger an activity to write a record to this table. This log should capture _who_, _what_, and _when_ for every financial event, which is invaluable for customer support, debugging, and compliance.
+
+### Tax Calculation
+
+- **Problem:** The system does not currently handle any form of taxation (like VAT, GST, or sales tax).
+- **Solution:** Integrate a tax calculation service. This would likely be a new activity in the `ClosedBillPostProcessWorkflow` (or run just before `CloseBillFromState`). This activity would take the subtotal and customer jurisdiction, call an external tax service (e.g., Avalara, TaxJar), and add the calculated tax as a separate, clearly-labeled line item on the final invoice.

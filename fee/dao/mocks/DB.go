@@ -17,9 +17,9 @@ type DB struct {
 	mock.Mock
 }
 
-// AddLineItem provides a mock function with given fields: ctx, billID, currency, amount, metadata, uid
-func (_m *DB) AddLineItem(ctx context.Context, billID string, currency string, amount int64, metadata *model.LineItemMetadata, uid string) error {
-	ret := _m.Called(ctx, billID, currency, amount, metadata, uid)
+// AddLineItem provides a mock function with given fields: ctx, billID, currency, amount, metadata, lineItemID
+func (_m *DB) AddLineItem(ctx context.Context, billID string, currency string, amount int64, metadata *model.LineItemMetadata, lineItemID string) error {
+	ret := _m.Called(ctx, billID, currency, amount, metadata, lineItemID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for AddLineItem")
@@ -27,7 +27,7 @@ func (_m *DB) AddLineItem(ctx context.Context, billID string, currency string, a
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, string, string, int64, *model.LineItemMetadata, string) error); ok {
-		r0 = rf(ctx, billID, currency, amount, metadata, uid)
+		r0 = rf(ctx, billID, currency, amount, metadata, lineItemID)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -295,6 +295,36 @@ func (_m *DB) UpdateBillTotal(ctx context.Context, billID string, currency strin
 	}
 
 	return r0
+}
+
+// UpdateLineItem provides a mock function with given fields: ctx, billID, lineItemID, status
+func (_m *DB) UpdateLineItem(ctx context.Context, billID string, lineItemID string, status string) (*model.LineItem, error) {
+	ret := _m.Called(ctx, billID, lineItemID, status)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateLineItem")
+	}
+
+	var r0 *model.LineItem
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) (*model.LineItem, error)); ok {
+		return rf(ctx, billID, lineItemID, status)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) *model.LineItem); ok {
+		r0 = rf(ctx, billID, lineItemID, status)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*model.LineItem)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
+		r1 = rf(ctx, billID, lineItemID, status)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // NewDB creates a new instance of DB. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
