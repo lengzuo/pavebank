@@ -3,7 +3,6 @@ package temporal
 import (
 	"time"
 
-	"encore.app/fee/model"
 	"encore.dev"
 	"encore.dev/rlog"
 	"go.temporal.io/api/enums/v1"
@@ -44,29 +43,28 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 	var activities *Activities
+
+	// 1. Get the correct billing policy from the factory
+	policy, err := NewBillingPolicy(req.PolicyType)
+	if err != nil {
+		return nil, err // Fails the workflow if policy is unknown
+	}
+
+	// 2. Initialize state
 	var state BillState
 	if req.PreviousState != nil {
-		// This is a continued run, so restore state from the previous session.
 		state = *req.PreviousState
-		workflow.GetLogger(ctx).Info("Continuing workflow from previous state.", "BillID", req.BillID, "EventCount", state.EventCount)
 	} else {
-		// This is the first run of the workflow.
-		// 1. Create bill entry in the database first.
+		// Create bill in DB
 		if err := workflow.ExecuteActivity(ctx, activities.CreateBill, req.BillID, req.PolicyType).Get(ctx, nil); err != nil {
-			workflow.GetLogger(ctx).Error("Failed to create bill in database, failing workflow", "error", err, "bill_id", req.BillID)
 			return nil, err
 		}
-
-		// State as the bill allows for the progressive accrual of fees per currency.
-		state = BillState{
-			BillID:     req.BillID,
-			Totals:     make(map[string]int64),
-			EventCount: 0,
-		}
+		// Get initial state from the policy
+		state = policy.GetInitialState(req)
 	}
 
 	// Create a query handler for API to query the current total bills before bills is closed
-	err := workflow.SetQueryHandler(ctx, QueryBillTotal, func() (map[string]int64, error) {
+	err = workflow.SetQueryHandler(ctx, QueryBillTotal, func() (map[string]int64, error) {
 		return state.Totals, nil
 	})
 	if err != nil {
@@ -93,31 +91,22 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 		selector.AddReceive(addItemSignalChan, func(c workflow.ReceiveChannel, more bool) {
 			var signal AddLineItemSignalRequest
 			c.Receive(ctx, &signal)
-			state.EventCount++ // Increment event counter
+			state.EventCount++
 
-			err := workflow.ExecuteActivity(ctx, activities.AddLineItem, signal.BillID, signal.Currency, signal.Amount, signal.Metadata, signal.LineItemID).Get(ctx, nil)
-			if err != nil {
-				// If adding a line item fails after retries, log it.
-				// Depending on business requirements, we might want to fail the workflow or send an alert.
-				// For now, we log and continue, as one failed item might not need to stop the whole bill.
-				workflow.GetLogger(ctx).Error("Failed to add line item after all retries.", "Error", err)
-			} else {
-				workflow.GetLogger(ctx).Debug("Add line item activity completed.", "BillID", signal.BillID)
+			// DELEGATE to the policy
+			if policy.HandleAddLineItem(ctx, activities, signal) {
 				state.Totals[string(signal.Currency)] += signal.Amount
 			}
 		})
 
+		// Listen for UpdateLineItem signals
 		selector.AddReceive(updateItemSignalChan, func(c workflow.ReceiveChannel, more bool) {
 			var signal UpdateLineItemSignalRequest
 			c.Receive(ctx, &signal)
 			state.EventCount++
 
-			var lineItem *model.LineItem
-			err := workflow.ExecuteActivity(ctx, activities.UpdateLineItem, signal.BillID, signal.LineItemID, signal.Status).Get(ctx, &lineItem)
-			if err != nil {
-				workflow.GetLogger(ctx).Error("Failed to update line item.", "Error", err, "BillID", signal.BillID, "LineItemID", signal.LineItemID)
-			} else {
-				workflow.GetLogger(ctx).Debug("Update bill totals.", "LineItemID", signal.LineItemID)
+			// DELEGATE to the policy
+			if lineItem := policy.HandleUpdateLineItem(ctx, activities, signal); lineItem != nil {
 				state.Totals[lineItem.Currency] -= lineItem.Amount
 			}
 		})
@@ -132,9 +121,11 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 
 		// Listen for the billing period end timer
 		selector.AddFuture(timerFuture, func(f workflow.Future) {
-			workflow.GetLogger(ctx).Info("Billing period timer fired.")
-			timerFired = true
-			workflowCompleted = true
+			// DELEGATE to the policy
+			if policy.OnTimerFired(ctx, &state) {
+				timerFired = true
+				workflowCompleted = true
+			}
 		})
 
 		selector.Select(ctx)
@@ -159,6 +150,11 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 	}
 
 	// --- Close the Bill ---
+	// DELEGATE final policy logic before closing
+	if err := policy.OnBillClose(ctx, &state); err != nil {
+		return nil, err
+	}
+
 	// This logic is now outside the loop and runs if the loop was exited by either the timer or an explicit signal.
 	if err := workflow.ExecuteActivity(ctx, activities.CloseBillFromState, state).Get(ctx, nil); err != nil {
 		// If closing the bill fails, the workflow must fail to prevent incorrect financial state.

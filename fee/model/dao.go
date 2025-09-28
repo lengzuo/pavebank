@@ -64,16 +64,16 @@ func ToCurrency(s string) (Currency, error) {
 type PolicyType string
 
 const (
-	PolicyTypeUsageBased PolicyType = "USAGE_BASED"
-	PolicyTypeMonthly    PolicyType = "MONTHLY"
+	UsageBased   PolicyType = "USAGE_BASED"
+	Subscription PolicyType = "SUBSCRIPTION"
 )
 
 func ToPolicyType(s string) (PolicyType, error) {
 	switch PolicyType(s) {
-	case PolicyTypeUsageBased:
-		return PolicyTypeUsageBased, nil
-	case PolicyTypeMonthly:
-		return PolicyTypeMonthly, nil
+	case UsageBased:
+		return UsageBased, nil
+	case Subscription:
+		return Subscription, nil
 	default:
 		return "", fmt.Errorf("invalid PolicyType: %s", s)
 	}

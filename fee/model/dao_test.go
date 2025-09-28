@@ -70,8 +70,8 @@ func TestToPolicyType(t *testing.T) {
 		want    PolicyType
 		wantErr bool
 	}{
-		{"ValidUsageBased", "USAGE_BASED", PolicyTypeUsageBased, false},
-		{"ValidMonthly", "MONTHLY", PolicyTypeMonthly, false},
+		{"ValidUsageBased", "USAGE_BASED", UsageBased, false},
+		{"ValidMonthly", "SUBSCRIPTION", Subscription, false},
 		{"InvalidType", "INVALID", "", true},
 		{"EmptyString", "", "", true},
 		{"Lowercase", "usage_based", "", true}, // Should fail, as it expects uppercase

@@ -46,7 +46,7 @@ func (s *Service) CreateBill(ctx context.Context, params *CreateBillParams) (*Cr
 
 	req := &temporal.BillLifecycleWorkflowRequest{
 		BillID:           params.BillID,
-		PolicyType:       model.PolicyTypeUsageBased,
+		PolicyType:       model.UsageBased,
 		BillingPeriodEnd: params.BillingPeriodEnd,
 	}
 

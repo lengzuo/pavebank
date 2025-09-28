@@ -11,6 +11,7 @@ type BillLifecycleWorkflowRequest struct {
 	PolicyType       model.PolicyType
 	BillingPeriodEnd time.Time
 	PreviousState    *BillState
+	SubscriptionFee  *model.LineItemSummary
 }
 
 type BillClosedPostProcessWorkflowRequest struct {

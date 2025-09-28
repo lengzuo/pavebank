@@ -36,7 +36,7 @@ func TestCreateBill(t *testing.T) {
 		mock.AnythingOfType("func(internal.Context, *temporal.BillLifecycleWorkflowRequest) (*temporal.BillResponse, error)"),
 		&temporal.BillLifecycleWorkflowRequest{
 			BillID:           params.BillID,
-			PolicyType:       model.PolicyTypeUsageBased,
+			PolicyType:       model.UsageBased,
 			BillingPeriodEnd: params.BillingPeriodEnd,
 		},
 	).Return(&mockWorkflowRun{}, nil)

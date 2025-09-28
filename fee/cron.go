@@ -46,7 +46,7 @@ func StartMonthlyBilling(ctx context.Context) error {
 
 		req := &temporal.BillLifecycleWorkflowRequest{
 			BillID:           customerID,
-			PolicyType:       model.PolicyTypeMonthly,
+			PolicyType:       model.Subscription,
 			BillingPeriodEnd: billingPeriodEnd,
 		}
 
