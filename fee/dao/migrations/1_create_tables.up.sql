@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS bills (
     policy_type VARCHAR(30) NOT NULL,
     currency VARCHAR(3) NOT NULL,
     total_amount BIGINT NOT NULL DEFAULT 0,
-    status CHAR(20) NOT NULL,
+    status VARCHAR(20) NOT NULL,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL,

@@ -92,7 +92,6 @@ func (s *Service) GetBills(ctx context.Context, params *GetBillsParams) (*GetBil
 				rlog.Error("failed to decode workflow query bill total", "error", err, "bill_id", bill.BillID)
 				continue
 			}
-			continue
 		}
 
 		resp.Bills[i].TotalCharge = Amount{
