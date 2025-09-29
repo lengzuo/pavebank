@@ -53,9 +53,8 @@ func TestGetBills_OPEN(t *testing.T) {
 	assert.False(t, resp.HasMore)
 	assert.Len(t, resp.Bills, 1)
 	assert.Equal(t, "test-bill-id", resp.Bills[0].BillID)
-	assert.Len(t, resp.Bills[0].TotalCharges, 1)
-	assert.Equal(t, "USD", resp.Bills[0].TotalCharges[0].Currency)
-	assert.Equal(t, int64(100), resp.Bills[0].TotalCharges[0].TotalAmount)
+	assert.Equal(t, int64(0), resp.Bills[0].TotalCharge.Value)
+	assert.Equal(t, "", resp.Bills[0].TotalCharge.Currency)
 
 	mockDB.AssertExpectations(t)
 	mockTemporalClient.AssertExpectations(t)
@@ -95,13 +94,12 @@ func TestGetBills_CLOSED(t *testing.T) {
 
 	bills := []*model.BillDetail{
 		{
-			BillID:     "test-bill-id",
-			Status:     "CLOSED",
-			PolicyType: "USAGE_BASED",
-			CreatedAt:  time.Now(),
-			TotalCharges: map[string]int64{
-				"USD": int64(100),
-			},
+			BillID:      "test-bill-id",
+			Status:      "CLOSED",
+			PolicyType:  "USAGE_BASED",
+			CreatedAt:   time.Now(),
+			TotalAmount: 100,
+			Currency:    "USD",
 		},
 	}
 
@@ -115,9 +113,8 @@ func TestGetBills_CLOSED(t *testing.T) {
 	assert.False(t, resp.HasMore)
 	assert.Len(t, resp.Bills, 1)
 	assert.Equal(t, "test-bill-id", resp.Bills[0].BillID)
-	assert.Len(t, resp.Bills[0].TotalCharges, 1)
-	assert.Equal(t, "USD", resp.Bills[0].TotalCharges[0].Currency)
-	assert.Equal(t, int64(100), resp.Bills[0].TotalCharges[0].TotalAmount)
+	assert.Equal(t, int64(100), resp.Bills[0].TotalCharge.Value)
+	assert.Equal(t, "USD", resp.Bills[0].TotalCharge.Currency)
 
 	mockDB.AssertExpectations(t)
 	mockTemporalClient.AssertExpectations(t)

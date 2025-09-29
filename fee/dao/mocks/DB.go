@@ -17,17 +17,17 @@ type DB struct {
 	mock.Mock
 }
 
-// AddLineItem provides a mock function with given fields: ctx, billID, currency, amount, metadata, lineItemID
-func (_m *DB) AddLineItem(ctx context.Context, billID string, currency string, amount int64, metadata *model.LineItemMetadata, lineItemID string) error {
-	ret := _m.Called(ctx, billID, currency, amount, metadata, lineItemID)
+// AddLineItem provides a mock function with given fields: ctx, billID, amount, metadata, lineItemID
+func (_m *DB) AddLineItem(ctx context.Context, billID string, amount int64, metadata *model.LineItemMetadata, lineItemID string) error {
+	ret := _m.Called(ctx, billID, amount, metadata, lineItemID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for AddLineItem")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, int64, *model.LineItemMetadata, string) error); ok {
-		r0 = rf(ctx, billID, currency, amount, metadata, lineItemID)
+	if rf, ok := ret.Get(0).(func(context.Context, string, int64, *model.LineItemMetadata, string) error); ok {
+		r0 = rf(ctx, billID, amount, metadata, lineItemID)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -35,17 +35,17 @@ func (_m *DB) AddLineItem(ctx context.Context, billID string, currency string, a
 	return r0
 }
 
-// CloseBill provides a mock function with given fields: ctx, billID, metadata
-func (_m *DB) CloseBill(ctx context.Context, billID string, metadata model.BillMetadata) error {
-	ret := _m.Called(ctx, billID, metadata)
+// CloseBill provides a mock function with given fields: ctx, billID, total
+func (_m *DB) CloseBill(ctx context.Context, billID string, total int64) error {
+	ret := _m.Called(ctx, billID, total)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CloseBill")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, model.BillMetadata) error); ok {
-		r0 = rf(ctx, billID, metadata)
+	if rf, ok := ret.Get(0).(func(context.Context, string, int64) error); ok {
+		r0 = rf(ctx, billID, total)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -53,17 +53,17 @@ func (_m *DB) CloseBill(ctx context.Context, billID string, metadata model.BillM
 	return r0
 }
 
-// CreateBill provides a mock function with given fields: ctx, billID, policyType
-func (_m *DB) CreateBill(ctx context.Context, billID string, policyType string) error {
-	ret := _m.Called(ctx, billID, policyType)
+// CreateBill provides a mock function with given fields: ctx, billID, policyType, currency, startAt, metadata
+func (_m *DB) CreateBill(ctx context.Context, billID string, policyType string, currency string, startAt time.Time, metadata model.BillMetadata) error {
+	ret := _m.Called(ctx, billID, policyType, currency, startAt, metadata)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CreateBill")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
-		r0 = rf(ctx, billID, policyType)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string, time.Time, model.BillMetadata) error); ok {
+		r0 = rf(ctx, billID, policyType, currency, startAt, metadata)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -305,24 +305,6 @@ func (_m *DB) IsLineItemExists(ctx context.Context, billID string, lineItemID st
 	}
 
 	return r0, r1
-}
-
-// UpdateBillTotal provides a mock function with given fields: ctx, billID, currency, amount
-func (_m *DB) UpdateBillTotal(ctx context.Context, billID string, currency string, amount int64) error {
-	ret := _m.Called(ctx, billID, currency, amount)
-
-	if len(ret) == 0 {
-		panic("no return value specified for UpdateBillTotal")
-	}
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, int64) error); ok {
-		r0 = rf(ctx, billID, currency, amount)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
 }
 
 // UpdateLineItem provides a mock function with given fields: ctx, billID, lineItemID, status

@@ -19,7 +19,6 @@ func TestAddLineItem(t *testing.T) {
 	billID := "test-bill-id"
 	params := &AddLineItemParams{
 		Amount:      100,
-		Currency:    "USD",
 		Description: "Test item",
 	}
 
@@ -38,7 +37,6 @@ func TestAddLineItem(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.Equal(t, params.Amount, resp.Amount)
-	assert.Equal(t, params.Currency, resp.Currency)
 	assert.Equal(t, billID, resp.BillID)
 	assert.Equal(t, params.Description, resp.Description)
 
