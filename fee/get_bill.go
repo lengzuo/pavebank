@@ -10,7 +10,7 @@ import (
 	"encore.dev/rlog"
 )
 
-//encore:api public method=GET path=/bills/:billID
+//encore:api public method=GET path=/api/bills/:billID
 func (s *Service) GetBill(ctx context.Context, billID string) (*temporal.BillResponse, error) {
 	resp, err := s.activity.GetBillDetail(ctx, billID)
 	if err != nil {

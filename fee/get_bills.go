@@ -37,7 +37,7 @@ type GetBillsParams struct {
 	Cursor string `query:"cursor"`
 }
 
-//encore:api public method=GET path=/bills
+//encore:api public method=GET path=/api/bills
 func (s *Service) GetBills(ctx context.Context, params *GetBillsParams) (*GetBillsResponse, error) {
 	status, err := model.ToBillStatus(strings.ToUpper(params.Status))
 	if err != nil {

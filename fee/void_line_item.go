@@ -17,7 +17,7 @@ type RemoveLineItemResponse struct {
 	BillID     string `json:"bill_id"`
 }
 
-//encore:api public method=PUT path=/bills/:billID/line-items/:lineItemID/void tag:idempotency
+//encore:api public method=PUT path=/api/bills/:billID/line-items/:lineItemID/void tag:idempotency
 func (s *Service) VoidLineItem(ctx context.Context, billID, lineItemID string) (*RemoveLineItemResponse, error) {
 	exits, err := s.db.IsLineItemExists(ctx, billID, lineItemID, string(model.LineItemStatusActive))
 	if err != nil {

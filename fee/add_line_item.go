@@ -26,7 +26,7 @@ type AddLineItemResponse struct {
 	Description string `json:"description"`
 }
 
-//encore:api public method=POST path=/bills/:billID/line-items tag:idempotency
+//encore:api public method=POST path=/api/bills/:billID/line-items tag:idempotency
 func (s *Service) AddLineItem(ctx context.Context, billID string, params *AddLineItemParams) (*AddLineItemResponse, error) {
 	if params.Amount <= 0 {
 		return nil, &errs.Error{

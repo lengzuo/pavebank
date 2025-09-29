@@ -16,7 +16,7 @@ type CloseBillParams struct {
 	IdempotencyKey string `header:"X-Idempotency-Key"`
 }
 
-//encore:api public method=POST path=/bills/:billID/close tag:idempotency
+//encore:api public method=POST path=/api/bills/:billID/close tag:idempotency
 func (s *Service) CloseBill(ctx context.Context, billID string, params *CloseBillParams) (*temporal.BillResponse, error) {
 	if billID == "" {
 		return nil, &errs.Error{

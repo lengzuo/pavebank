@@ -72,7 +72,7 @@ type CreateBillResponse struct {
 	Status string `json:"status"`
 }
 
-//encore:api public method=POST path=/bills tag:idempotency
+//encore:api public method=POST path=/api/bills tag:idempotency
 func (s *Service) CreateBill(ctx context.Context, params *CreateBillParams) (*CreateBillResponse, error) {
 	if err := params.Validate(); err != nil {
 		return nil, &errs.Error{
