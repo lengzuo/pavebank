@@ -6,6 +6,14 @@ It is designed to handle both usage-based and monthly billing cycles, allowing f
 
 ## Project Overview
 
+This Fees API is designed to serve as a robust, scalable, and reliable billing backend, primarily for **B2B (Business-to-Business) use cases**. It assumes integration with other internal services and platforms that require accurate and auditable tracking of charges.
+
+**Target Users and Integration Points:**
+
+- **Internal Services/Developers:** The primary consumers of this API. They integrate with the system using the defined RESTful endpoints (e.g., to create new bills, add usage events as line items, or trigger manual closures). For advanced, event-driven scenarios, they might interact directly with Temporal workflows via signals and queries.
+- **Internal Operations/Support Teams:** These users would likely interact with the `Get Bill` and `List Bills` APIs, possibly through an internal UI built on top of this API, for monitoring ongoing billing cycles, troubleshooting customer inquiries, and verifying charges.
+- **Billing/Finance Teams:** While not direct API users, they rely on the system's output. They would consume historical billing data (persisted in Postgres) for reporting, reconciliation, auditing, and financial analysis.
+
 The core of the system is a long-running Temporal workflow, `BillLifecycleWorkflow`, that represents the lifecycle of a single bill. This workflow is responsible for:
 
 - Tracking a defined billing period (e.g., one month).
@@ -57,9 +65,9 @@ The core of the system is a long-running Temporal workflow, `BillLifecycleWorkfl
 
 You can interact with the API via `curl` or by using the **API Explorer** in the Encore Development Dashboard (usually at `http://localhost:9400/`).
 
-### Create a New Bill
+### Create a New Bill (Asynchronous)
 
-Starts a new billing cycle (either usage-based or subscription) for a given `bill_id`.
+Starts a new billing cycle (either usage-based or subscription) for a given `bill_id`. This API is **asynchronous**, returning immediately after initiating a Temporal workflow for the billing process.
 
 **Endpoint:** `POST /api/bills`
 
@@ -104,9 +112,9 @@ _(Note: The `date` command above is for macOS/BSD to get a timestamp 10 minutes 
 - The `X-Idempotency-Key` header is handled by Encore's middleware to prevent creating duplicate workflows from retried API calls.
 - The `billing_period_end` tells the workflow when to automatically close itself.
 
-### Add a Line Item
+### Add a Line Item (Asynchronous)
 
-Adds a fee to an existing, open bill.
+Adds a fee to an existing, open bill. This API is **asynchronous**, sending a signal to the running bill workflow and returning immediately.
 
 **Endpoint:** `POST /api/bills/{billID}/line-items`
 
@@ -131,9 +139,9 @@ curl -X POST http://localhost:4000/api/bills/project-xyz-usage/line-items \
 - The workflow executes an activity that inserts the line item into the database. A unique `uid` is generated for this insertion to provide database-level idempotency.
 - If the insertion is successful, the workflow updates its internal in-memory total for that currency.
 
-### Void a Line Item
+### Void a Line Item (Asynchronous)
 
-Voids a specific line item from an open bill, effectively removing its amount from the total.
+Voids a specific line item from an open bill, effectively removing its amount from the total. This API is **asynchronous**, sending a signal to the running bill workflow and returning immediately.
 
 **Endpoint:** `PUT /api/bills/{billID}/line-items/{lineItemID}/void`
 
@@ -151,9 +159,9 @@ curl -X PUT http://localhost:4000/api/bills/project-xyz-usage/line-items/{lineIt
 - The workflow triggers an `UpdateLineItem` activity. This activity changes the line item's `status` to `voided` in the database and returns the full line item object.
 - Upon successful completion of the activity, the workflow subtracts the `amount` of the voided line item from its in-memory `Totals` map for the corresponding `currency`. This ensures the live, queryable total is immediately corrected.
 
-### Manually Close a Bill
+### Manually Close a Bill (Synchronous)
 
-Explicitly closes a bill before its scheduled `billing_period_end`.
+Explicitly closes a bill before its scheduled `billing_period_end`. This API is **synchronous**, as it waits for the underlying Temporal workflow to complete the closure process and return the final bill details.
 
 **Endpoint:** `POST /api/bills/{billID}/close`
 
@@ -168,9 +176,9 @@ curl -X POST http://localhost:4000/api/bills/project-xyz-usage/close
 - Sends a `CloseBill` signal to the running workflow.
 - The workflow stops its timer, finalizes the bill state by persisting the in-memory totals to the database, and triggers the post-processing child workflow.
 
-### Get a Single Bill
+### Get a Single Bill (Synchronous)
 
-Retrieves the details of a specific bill.
+Retrieves the details of a specific bill. This API is **synchronous**, designed for real-time querying of a bill's status and current totals.
 
 **Endpoint:** `GET /api/bills/{billID}`
 
@@ -186,9 +194,9 @@ curl "http://localhost:4000/api/bills/project-xyz-usage"
 - For open bills, it performs a Temporal Query against the live running workflow to fetch the real-time totals.
 - For closed bills, it reads the finalized data directly from the database.
 
-### List Bills
+### List Bills (Synchronous)
 
-Retrieves a paginated list of open or closed bills.
+Retrieves a paginated list of open or closed bills. This API is **synchronous**, designed for real-time display of bill information.
 
 **Endpoint:** `GET /api/bills`
 
@@ -211,7 +219,12 @@ curl "http://localhost:4000/api/bills?status=open&limit=5"
 
 This project includes several key design patterns that are critical for building robust, scalable financial systems.
 
-### 1. Hybrid State Management
+### 1. Modular and Integrable Design
+
+- **What:** The API is designed with clear boundaries and a focus on standard communication patterns (RESTful HTTP, Temporal signals/queries). The business logic is encapsulated within Temporal workflows and activities, separated from the API layer. Policy-based billing allows for easy extension without modifying core logic.
+- **Why:** This modularity ensures that internal users and other internal services can integrate with the Fees API seamlessly. Services can interact via well-defined REST endpoints, or directly with Temporal workflows via signals and queries for more advanced, event-driven integrations. This promotes reusability, reduces coupling, and simplifies maintenance and evolution of the billing system.
+
+### 2. Hybrid State Management
 
 - **What:** The system uses a hybrid model for state. Live, in-flight totals are held in the workflow's memory for speed and consistency. Historical, finalized totals are persisted to the database for long-term storage and rich querying.
 - **Why:** This provides the best of both worlds: the real-time accuracy of a Temporal Query for open bills, and the powerful query capabilities of SQL for historical reporting and listing.

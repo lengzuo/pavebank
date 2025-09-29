@@ -24,6 +24,7 @@ type AddLineItemResponse struct {
 	Amount      int64  `json:"amount"`
 	BillID      string `json:"bill_id"`
 	Description string `json:"description"`
+	WorkflowID  string `json:"workflow_id"`
 }
 
 //encore:api public method=POST path=/api/bills/:billID/line-items tag:idempotency
@@ -62,5 +63,6 @@ func (s *Service) AddLineItem(ctx context.Context, billID string, params *AddLin
 		Amount:      params.Amount,
 		BillID:      billID,
 		Description: params.Description,
+		WorkflowID:  workflowID,
 	}, nil
 }

@@ -10,6 +10,7 @@ import (
 	"encore.dev/beta/errs"
 	"encore.dev/rlog"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/client"
 )
 
 type CloseBillParams struct {
@@ -45,11 +46,13 @@ func (s *Service) CloseBill(ctx context.Context, billID string, params *CloseBil
 	}
 
 	// Get a handle to the workflow run
-	run := s.client.GetWorkflow(ctx, workflowID, "")
+	we := s.client.GetWorkflow(ctx, workflowID, "")
 
 	// Wait for the workflow to complete and retrieve the result
 	var billDetail temporal.BillResponse
-	err = run.Get(ctx, &billDetail)
+	err = we.GetWithOptions(ctx, &billDetail, client.WorkflowRunGetOptions{
+		DisableFollowingRuns: false,
+	})
 	if err != nil {
 		rlog.Error("failed to get workflow result", "error", err, "bill_id", billID)
 		return nil, fmt.Errorf("failed to get workflow result: %w", err)

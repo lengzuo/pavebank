@@ -15,6 +15,7 @@ import (
 type RemoveLineItemResponse struct {
 	LineItemID string `json:"line_item_id"`
 	BillID     string `json:"bill_id"`
+	WorkflowID string `json:"workflow_id"`
 }
 
 //encore:api public method=PUT path=/api/bills/:billID/line-items/:lineItemID/void tag:idempotency
@@ -54,5 +55,6 @@ func (s *Service) VoidLineItem(ctx context.Context, billID, lineItemID string) (
 	return &RemoveLineItemResponse{
 		LineItemID: lineItemID,
 		BillID:     billID,
+		WorkflowID: workflowID,
 	}, nil
 }

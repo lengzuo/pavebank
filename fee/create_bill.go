@@ -68,8 +68,9 @@ func (p *CreateBillParams) Validate() error {
 }
 
 type CreateBillResponse struct {
-	BillID string `json:"bill_id"`
-	Status string `json:"status"`
+	BillID     string `json:"bill_id"`
+	WorkflowID string `json:"workflow_id"`
+	Status     string `json:"status"`
 }
 
 //encore:api public method=POST path=/api/bills tag:idempotency
@@ -109,7 +110,7 @@ func (s *Service) CreateBill(ctx context.Context, params *CreateBillParams) (*Cr
 		}
 	}
 
-	_, err = s.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	w, err := s.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        temporal.BillCycleWorkflowID(params.BillID),
 		TaskQueue: temporal.BillCycleTaskQueue,
 	}, temporal.BillLifecycleWorkflow, req)
@@ -118,5 +119,5 @@ func (s *Service) CreateBill(ctx context.Context, params *CreateBillParams) (*Cr
 		return nil, errors.New("failed to start workflow: " + params.BillID)
 	}
 
-	return &CreateBillResponse{BillID: params.BillID, Status: string(model.BillStatusOpen)}, nil
+	return &CreateBillResponse{BillID: params.BillID, Status: string(model.BillStatusOpen), WorkflowID: w.GetID()}, nil
 }
