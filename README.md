@@ -102,6 +102,8 @@ curl -X POST http://localhost:4000/bills/project-xyz-usage/line-items \
 }'
 ```
 
+**Important:** The `amount` field must be provided in the currency's smallest unit (e.g., cents for USD). For example, to charge $5.00 USD, you must send an `amount` of `500`. This is a best practice to avoid floating-point errors in financial calculations.
+
 **How it Works:**
 
 - This sends an `AddLineItem` signal to the running workflow.
@@ -197,7 +199,82 @@ This project includes several key design patterns that are critical for building
 
 ---
 
-## 4. Future Considerations
+## 4. Developer Cookbook: Recipes for Common Tasks
+
+This section provides practical guides for extending the functionality of the Fees API. Following these recipes ensures that new contributions align with the established architectural patterns.
+
+### Recipe 1: How to Add a New Billing Policy
+
+The system is designed to be extensible with new billing models (e.g., tiered pricing, pre-paid credits) using the **Policy Pattern**. This keeps the core `BillLifecycleWorkflow` untouched and stable.
+
+**Scenario:** You want to add a new `TieredPricingPolicy`.
+
+1.  **Define the Policy Type:**
+    Open `fee/model/dao.go` and add a new constant to the `PolicyType` enum:
+
+    ```go
+    const (
+        UsageBased   PolicyType = "USAGE_BASED"
+        Subscription PolicyType = "SUBSCRIPTION"
+        TieredPricing PolicyType = "TIERED_PRICING" // Add this line
+    )
+    ```
+
+2.  **Create the Policy File:**
+    Create a new file `fee/workflow/tiered_pricing_policy.go`.
+
+3.  **Implement the `BillingPolicy` Interface:**
+    In the new file, define your `TieredPricingPolicy` struct and implement all the methods of the `BillingPolicy` interface (`GetInitialState`, `HandleAddLineItem`, etc.). This is where you'll place the unique logic for your new policy. For example, your `OnBillClose` method might calculate the final cost based on different usage tiers.
+
+    ```go
+    // fee/workflow/tiered_pricing_policy.go
+    package temporal
+
+    type TieredPricingPolicy struct{}
+
+    func (p *TieredPricingPolicy) GetInitialState(...) { ... }
+    func (p *TieredPricingPolicy) HandleAddLineItem(...) { ... }
+    // ... implement all interface methods
+    ```
+
+4.  **Register the New Policy:**
+    Open `fee/workflow/policy.go` and add your new policy to the `NewBillingPolicy` factory function. This makes the workflow aware of your new type.
+    ```go
+    // fee/workflow/policy.go
+    func NewBillingPolicy(policyType model.PolicyType) (BillingPolicy, error) {
+        switch policyType {
+        case model.UsageBased:
+            return &UsageBasedPolicy{}, nil
+        case model.Subscription:
+            return &SubscriptionPolicy{}, nil
+        case model.TieredPricing: // Add this case
+            return &TieredPricingPolicy{}, nil
+        default:
+            // ...
+        }
+    }
+    ```
+
+### Recipe 2: How to Add a New Post-Processing Step
+
+The `ClosedBillPostProcessWorkflow` is designed for adding sequential, non-critical tasks that should run after a bill is finalized (e.g., calculating taxes, syncing to a CRM, etc.).
+
+**Scenario:** You need to add a `CalculateTaxes` step before generating the PDF.
+
+1.  **Create the New Activity:**
+    Open `fee/workflow/activities.go` and define your new activity function, `CalculateTaxes`. This function should be idempotent and contain all the logic for the step.
+
+    ```go
+    // fee/workflow/activities.go
+    func (a *Activities) CalculateTaxes(ctx context.Context, billID string) error {
+        // ... your tax calculation logic here ...
+        return nil
+    }
+    ```
+
+---
+
+## 5. Future Considerations
 
 As a production-grade service, the following areas would be the next logical steps for improvement.
 

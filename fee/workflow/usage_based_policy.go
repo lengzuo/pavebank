@@ -8,16 +8,16 @@ import (
 // UsageBasedPolicy implements the logic for a standard usage-based bill.
 type UsageBasedPolicy struct{}
 
-func (p *UsageBasedPolicy) GetInitialState(req *BillLifecycleWorkflowRequest) BillState {
-	return BillState{
-		BillID:     req.BillID,
-		Totals:     make(map[string]int64),
-		EventCount: 0,
-	}
+func NewUsagePolicy() *UsageBasedPolicy {
+	return &UsageBasedPolicy{}
+}
+
+func (p *UsageBasedPolicy) HandleRecurringItem(ctx workflow.Context, activities *Activities, onSuccess func(_ int64)) error {
+	return nil
 }
 
 func (p *UsageBasedPolicy) HandleAddLineItem(ctx workflow.Context, activities *Activities, signal AddLineItemSignalRequest) bool {
-	err := workflow.ExecuteActivity(ctx, activities.AddLineItem, signal.BillID, signal.Currency, signal.Amount, signal.Metadata, signal.LineItemID).Get(ctx, nil)
+	err := workflow.ExecuteActivity(ctx, activities.AddLineItem, signal.BillID, signal.Amount, signal.Metadata, signal.LineItemID).Get(ctx, nil)
 	if err != nil {
 		workflow.GetLogger(ctx).Error("Failed to add line item after all retries.", "Error", err)
 		return false // Do not update totals if the activity failed
@@ -46,4 +46,8 @@ func (p *UsageBasedPolicy) OnBillClose(ctx workflow.Context, state *BillState) e
 func (p *UsageBasedPolicy) OnTimerFired(ctx workflow.Context, state *BillState) bool {
 	// For a usage-based bill, the timer firing always means we should close the bill.
 	return true
+}
+
+func (p *UsageBasedPolicy) RecurringFuture() workflow.Future {
+	return nil
 }

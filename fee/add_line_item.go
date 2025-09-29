@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"encore.app/fee/model"
+	"encore.app/fee/utils"
 	temporal "encore.app/fee/workflow"
 	"encore.dev/beta/errs"
 	"encore.dev/rlog"
@@ -14,7 +15,6 @@ import (
 
 type AddLineItemParams struct {
 	Amount         int64  `json:"amount"`
-	Currency       string `json:"currency"`
 	Description    string `json:"description"`
 	IdempotencyKey string `header:"X-Idempotency-Key"`
 }
@@ -22,7 +22,6 @@ type AddLineItemParams struct {
 type AddLineItemResponse struct {
 	LineItemID  string `json:"line_item_id"`
 	Amount      int64  `json:"amount"`
-	Currency    string `json:"currency"`
 	BillID      string `json:"bill_id"`
 	Description string `json:"description"`
 }
@@ -35,17 +34,9 @@ func (s *Service) AddLineItem(ctx context.Context, billID string, params *AddLin
 			Message: "amount must be positive",
 		}
 	}
-	currency, err := model.ToCurrency(params.Currency)
-	if err != nil {
-		return nil, &errs.Error{
-			Code:    errs.InvalidArgument,
-			Message: "invalid currency",
-		}
-	}
 	signal := temporal.AddLineItemSignalRequest{
-		LineItemID: UUID(),
+		LineItemID: utils.UUID(),
 		Amount:     params.Amount,
-		Currency:   currency,
 		BillID:     billID,
 	}
 	if params.Description != "" {
@@ -53,7 +44,7 @@ func (s *Service) AddLineItem(ctx context.Context, billID string, params *AddLin
 	}
 	workflowID := temporal.BillCycleWorkflowID(billID)
 
-	err = s.client.SignalWorkflow(ctx, workflowID, "", temporal.AddLineItemSignal, signal)
+	err := s.client.SignalWorkflow(ctx, workflowID, "", temporal.AddLineItemSignal, signal)
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) || errors.Is(err, sql.ErrNoRows) {
@@ -69,7 +60,6 @@ func (s *Service) AddLineItem(ctx context.Context, billID string, params *AddLin
 	return &AddLineItemResponse{
 		LineItemID:  signal.LineItemID,
 		Amount:      params.Amount,
-		Currency:    params.Currency,
 		BillID:      billID,
 		Description: params.Description,
 	}, nil

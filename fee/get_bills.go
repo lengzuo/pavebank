@@ -11,19 +11,19 @@ import (
 	"encore.dev/rlog"
 )
 
-type TotalSummary struct {
-	Currency      string `json:"currency"`
-	TotalAmount   int64  `json:"total_amount"`
-	DisplayAmount string `json:"display_amount"`
+type Amount struct {
+	Currency     string `json:"currency"`
+	Value        int64  `json:"value"`
+	DisplayValue string `json:"display_value"`
 }
 
 type Bill struct {
-	BillID       string         `json:"bill_id"`
-	Status       string         `json:"status"`
-	PolicyType   string         `json:"policy_type"`
-	CreatedAt    time.Time      `json:"created_at"`
-	ClosedAt     *time.Time     `json:"closed_at,omitempty"`
-	TotalCharges []TotalSummary `json:"total_charges"`
+	BillID      string     `json:"bill_id"`
+	Status      string     `json:"status"`
+	PolicyType  string     `json:"policy_type"`
+	CreatedAt   time.Time  `json:"created_at"`
+	ClosedAt    *time.Time `json:"closed_at,omitempty"`
+	TotalCharge Amount     `json:"total_charge"`
 }
 
 type GetBillsResponse struct {
@@ -78,38 +78,27 @@ func (s *Service) GetBills(ctx context.Context, params *GetBillsParams) (*GetBil
 			CreatedAt:  bill.CreatedAt,
 			ClosedAt:   bill.ClosedAt,
 		}
+		totalAmount := bill.TotalAmount
 		// Query from temporal state if bills is still open
 		if bill.Status == string(model.BillStatusOpen) {
 			workflowID := "bill-" + bill.BillID
 			queryResult, err := s.client.QueryWorkflow(ctx, workflowID, "", temporal.QueryBillTotal)
 			if err != nil {
 				rlog.Error("failed to query workflow for live totals", "error", err, "bill_id", bill.BillID)
-				resp.Bills[i].TotalCharges = []TotalSummary{}
+				resp.Bills[i].TotalCharge = Amount{}
 				continue
 			}
-			var totals map[string]int64
-			if err := queryResult.Get(&totals); err != nil {
+			if err := queryResult.Get(&totalAmount); err != nil {
 				rlog.Error("failed to decode workflow query bill total", "error", err, "bill_id", bill.BillID)
 				continue
 			}
-			resp.Bills[i].TotalCharges = make([]TotalSummary, 0, len(totals))
-			for currency, amount := range totals {
-				resp.Bills[i].TotalCharges = append(resp.Bills[i].TotalCharges, TotalSummary{
-					Currency:      currency,
-					TotalAmount:   amount,
-					DisplayAmount: model.FormatAmount(amount),
-				})
-			}
 			continue
 		}
-		resp.Bills[i].TotalCharges = make([]TotalSummary, 0, len(bill.TotalCharges))
-		for currency := range bill.TotalCharges {
-			amount := bill.TotalCharges[currency]
-			resp.Bills[i].TotalCharges = append(resp.Bills[i].TotalCharges, TotalSummary{
-				Currency:      currency,
-				TotalAmount:   amount,
-				DisplayAmount: model.FormatAmount(amount),
-			})
+
+		resp.Bills[i].TotalCharge = Amount{
+			Currency:     bill.Currency,
+			Value:        totalAmount,
+			DisplayValue: model.FormatAmount(totalAmount),
 		}
 	}
 

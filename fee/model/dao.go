@@ -84,20 +84,24 @@ func FormatAmount(amount int64) string {
 	return decimal.NewFromInt(amount).Div(decimal.NewFromInt(100)).StringFixed(2)
 }
 
+type Recurring struct {
+	Description string `json:"description"`
+	Amount      int64  `json:"amount"`
+	Interval    string `json:"interval"`
+}
 type BillMetadata struct {
-	TotalAmounts         map[string]int64 `json:"total_amounts"`
-	FinalChargedAmount   int64            `json:"final_charged_amount"`
-	FinalChargedCurrency string           `json:"final_charged_currency"`
+	Recurring *Recurring `json:"recurring,omitempty"`
 }
 
 type Bill struct {
-	BillID     string     `json:"bill_id"`
-	PolicyType string     `json:"policy_type"`
-	Status     string     `json:"status"`
-	Metadata   string     `json:"metadata"`
-	CreatedAt  time.Time  `json:"created_at"`
-	UpdatedAt  time.Time  `json:"updated_at"`
-	ClosedAt   *time.Time `json:"closed_at"`
+	BillID      string     `json:"bill_id"`
+	PolicyType  string     `json:"policy_type"`
+	Status      string     `json:"status"`
+	TotalAmount int64      `json:"total_amount"`
+	Metadata    string     `json:"metadata"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	ClosedAt    *time.Time `json:"closed_at"`
 }
 
 type LineItemMetadata struct {
@@ -107,7 +111,6 @@ type LineItemMetadata struct {
 type LineItem struct {
 	LineItemID string    `json:"line_item_id"`
 	Metadata   string    `json:"metadata"`
-	Currency   string    `json:"currency"`
 	Amount     int64     `json:"amount"`
 	CreatedAt  time.Time `json:"created_at"`
 	Status     string    `json:"status"`
@@ -124,11 +127,12 @@ type TotalSummary struct {
 }
 
 type BillDetail struct {
-	BillID       string           `json:"bill_id"`
-	Status       string           `json:"status"`
-	PolicyType   string           `json:"policy_type"`
-	CreatedAt    time.Time        `json:"created_at"`
-	ClosedAt     *time.Time       `json:"closed_at,omitempty"`
-	LineItems    []LineItem       `json:"line_items"`
-	TotalCharges map[string]int64 `json:"total_charges"`
+	BillID      string     `json:"bill_id"`
+	Status      string     `json:"status"`
+	PolicyType  string     `json:"policy_type"`
+	CreatedAt   time.Time  `json:"created_at"`
+	ClosedAt    *time.Time `json:"closed_at,omitempty"`
+	LineItems   []LineItem `json:"line_items"`
+	Currency    string     `json:"currency"`
+	TotalAmount int64      `json:"total_amount"`
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"encore.app/fee/dao"
 	"encore.app/fee/model"
@@ -22,8 +23,8 @@ func NewActivity(db dao.DB) *Activities {
 	return &Activities{db: db}
 }
 
-func (a *Activities) AddLineItem(ctx context.Context, billID, currency string, amount int64, metadata *model.LineItemMetadata, lineItemID string) error {
-	err := a.db.AddLineItem(ctx, billID, currency, amount, metadata, lineItemID)
+func (a *Activities) AddLineItem(ctx context.Context, billID string, amount int64, metadata *model.LineItemMetadata, lineItemID string) error {
+	err := a.db.AddLineItem(ctx, billID, amount, metadata, lineItemID)
 	if err != nil {
 		return fmt.Errorf("failed to add line item: %s", err)
 	}
@@ -38,15 +39,21 @@ func (a *Activities) UpdateLineItem(ctx context.Context, billID, lineItemID, sta
 	return lineItem, nil
 }
 
-func (a *Activities) CreateBill(ctx context.Context, billID string, policyType model.PolicyType) error {
-	return a.db.CreateBill(ctx, billID, string(policyType))
+func (a *Activities) CreateBill(ctx context.Context, billID, policyType, currency string, startAt time.Time, recurring RecurringPolicy) error {
+	metadata := model.BillMetadata{}
+	if recurring.Amount > 0 && recurring.Interval.Duration > 0 {
+		metadata.Recurring = &model.Recurring{
+			Description: recurring.Description,
+			Amount:      recurring.Amount,
+			Interval:    recurring.Interval.String(),
+		}
+	}
+
+	return a.db.CreateBill(ctx, billID, string(policyType), currency, startAt, metadata)
 }
 
 func (a *Activities) CloseBillFromState(ctx context.Context, state BillState) error {
-	billMetadata := model.BillMetadata{
-		TotalAmounts: state.Totals,
-	}
-	err := a.db.CloseBill(ctx, state.BillID, billMetadata)
+	err := a.db.CloseBill(ctx, state.BillID, state.Total)
 	return err
 }
 
@@ -56,20 +63,16 @@ func (a *Activities) GetBillDetail(ctx context.Context, billID string) (*BillRes
 		return nil, err
 	}
 	resp := &BillResponse{
-		BillID:     bill.BillID,
-		Status:     bill.Status,
-		PolicyType: bill.PolicyType,
-		CreatedAt:  bill.CreatedAt,
-		ClosedAt:   bill.ClosedAt,
+		BillID:        bill.BillID,
+		Currency:      bill.Currency,
+		Status:        bill.Status,
+		PolicyType:    bill.PolicyType,
+		CreatedAt:     bill.CreatedAt,
+		ClosedAt:      bill.ClosedAt,
+		TotalAmount:   bill.TotalAmount,
+		DisplayAmount: model.FormatAmount(bill.TotalAmount),
 	}
-	resp.TotalCharges = make([]TotalSummary, 0, len(bill.TotalCharges))
-	for currency, amount := range bill.TotalCharges {
-		resp.TotalCharges = append(resp.TotalCharges, TotalSummary{
-			Currency:      currency,
-			TotalAmount:   amount,
-			DisplayAmount: model.FormatAmount(amount),
-		})
-	}
+
 	resp.LineItems = make([]LineItem, 0, len(bill.LineItems))
 	for _, item := range bill.LineItems {
 		var metadata model.LineItemMetadata
@@ -79,7 +82,7 @@ func (a *Activities) GetBillDetail(ctx context.Context, billID string) (*BillRes
 		}
 		resp.LineItems = append(resp.LineItems, LineItem{
 			LineItemID:    item.LineItemID,
-			Currency:      item.Currency,
+			Currency:      bill.Currency,
 			Amount:        item.Amount,
 			Description:   metadata.Description,
 			CreatedAt:     item.CreatedAt,

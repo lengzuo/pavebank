@@ -27,7 +27,7 @@ const (
 )
 
 type BillState struct {
-	Totals     map[string]int64
+	Total      int64
 	BillID     string
 	EventCount int
 }
@@ -44,28 +44,32 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 	ctx = workflow.WithActivityOptions(ctx, ao)
 	var activities *Activities
 
-	// 1. Get the correct billing policy from the factory
-	policy, err := NewBillingPolicy(req.PolicyType)
+	policy, err := NewBillingPolicy(ctx, req)
 	if err != nil {
-		return nil, err // Fails the workflow if policy is unknown
+		return nil, err
 	}
 
-	// 2. Initialize state
 	var state BillState
 	if req.PreviousState != nil {
 		state = *req.PreviousState
 	} else {
 		// Create bill in DB
-		if err := workflow.ExecuteActivity(ctx, activities.CreateBill, req.BillID, req.PolicyType).Get(ctx, nil); err != nil {
+		// Set req.Recuring to nil will get weird error in temporal
+		if err := workflow.ExecuteActivity(ctx, activities.CreateBill, req.BillID, req.PolicyType, req.Currency, req.BilingPeriodStart, req.Recurring).Get(ctx, nil); err != nil {
+			workflow.GetLogger(ctx).Error("Failed to execute create bill acitivities", "error", err)
 			return nil, err
 		}
 		// Get initial state from the policy
-		state = policy.GetInitialState(req)
+		state = BillState{
+			Total:      0,
+			EventCount: 0,
+			BillID:     req.BillID,
+		}
 	}
 
 	// Create a query handler for API to query the current total bills before bills is closed
-	err = workflow.SetQueryHandler(ctx, QueryBillTotal, func() (map[string]int64, error) {
-		return state.Totals, nil
+	err = workflow.SetQueryHandler(ctx, QueryBillTotal, func() (int64, error) {
+		return state.Total, nil
 	})
 	if err != nil {
 		workflow.GetLogger(ctx).Error("Failed to register query bill total handler", "error", err)
@@ -95,9 +99,18 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 
 			// DELEGATE to the policy
 			if policy.HandleAddLineItem(ctx, activities, signal) {
-				state.Totals[string(signal.Currency)] += signal.Amount
+				state.Total += signal.Amount
 			}
 		})
+
+		if recurringFeeTimer := policy.RecurringFuture(); recurringFeeTimer != nil {
+			selector.AddFuture(recurringFeeTimer, func(f workflow.Future) {
+				state.EventCount++
+				policy.HandleRecurringItem(ctx, activities, func(newAmount int64) {
+					state.Total += newAmount
+				})
+			})
+		}
 
 		// Listen for UpdateLineItem signals
 		selector.AddReceive(updateItemSignalChan, func(c workflow.ReceiveChannel, more bool) {
@@ -107,7 +120,7 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 
 			// DELEGATE to the policy
 			if lineItem := policy.HandleUpdateLineItem(ctx, activities, signal); lineItem != nil {
-				state.Totals[lineItem.Currency] -= lineItem.Amount
+				state.Total -= lineItem.Amount
 			}
 		})
 
@@ -116,6 +129,13 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 			var signal ClosedBillRequest
 			c.Receive(ctx, &signal)
 			workflow.GetLogger(ctx).Info("Received explicit CloseBillSignal.")
+
+			// TODO: [BIZ METRICS] capture reason of manual cancel
+			// Capture the *reason*.
+			// This requires enhancing the `ClosedBillRequest` signal to include an optional `reason` enum/string.
+			// The metric would then be `bills_closed_manually_total{policy="usage_based", reason="customer_request"}`.
+			// This provides invaluable business insight into why bills are deviating from the automated path.
+
 			workflowCompleted = true
 		})
 
@@ -138,6 +158,14 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 
 		// Check if the event threshold has been reached to continue as new
 		if state.EventCount >= ContinueAsNewEventThreshold {
+			// TODO: [BIZ METRICS] capture calculation latency.
+			// Captured the real-world performance of this operation.
+			// Before continuing as new, you would record the workflow's duration up to this point.
+			// Metric: `workflow_continue_as_new_duration_seconds{policy="usage_based"}`.
+			// This tells you the "cost" of a long-running workflow and helps validate if the `ContinueAsNewEventThreshold`
+			// is set appropriately. If this duration is consistently high, it might indicate a performance bottleneck
+			// that needs to be addressed, something a simple event count would never reveal.
+
 			workflow.GetLogger(ctx).Info("Event threshold reached, continuing as new.", "EventCount", state.EventCount)
 			req.PreviousState = &state
 			return nil, workflow.NewContinueAsNewError(ctx, BillLifecycleWorkflow, req)
@@ -178,7 +206,7 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 	})
 
 	// Only trigger post process if there is a charges required
-	if len(billDetail.TotalCharges) > 0 {
+	if billDetail.TotalAmount > 0 {
 		childWorkflow := workflow.ExecuteChildWorkflow(ctx, ClosedBillPostProcessWorkflow, BillClosedPostProcessWorkflowRequest{
 			BillID: req.BillID,
 		})
@@ -187,7 +215,9 @@ func BillLifecycleWorkflow(ctx workflow.Context, req *BillLifecycleWorkflowReque
 			// This is worth logging an error for, but we still shouldn't fail the parent.
 			// The bill is closed, which is the main thing.
 			workflow.GetLogger(ctx).Error("CRITICAL: Failed to START post-process child workflow. Manual review required.", "Error", err, "BillID", req.BillID)
-			// We will NOT return the error, allowing the parent workflow to complete successfully. Trigger alert
+
+			// TODO: Trigger PagerDuty alert for manual intervention.
+			// We will NOT return the error, allowing the parent workflow to complete successfully.
 		} else {
 			workflow.GetLogger(ctx).Info("Successfully started post-process child workflow.", "BillID", req.BillID)
 		}

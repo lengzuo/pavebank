@@ -5,10 +5,13 @@ CREATE TABLE IF NOT EXISTS bills (
     id SERIAL PRIMARY KEY,
     bill_id VARCHAR(64) NOT NULL,
     policy_type VARCHAR(30) NOT NULL,
-    status VARCHAR(20) NOT NULL,
+    currency VARCHAR(3) NOT NULL,
+    total_amount BIGINT NOT NULL DEFAULT 0,
+    status CHAR(20) NOT NULL,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL,
     closed_at TIMESTAMPTZ,
     UNIQUE(bill_id)
 );
@@ -23,7 +26,6 @@ CREATE TABLE IF NOT EXISTS line_items (
     status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
     bill_id VARCHAR(64) NOT NULL,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    currency CHAR(3) NOT NULL,
     amount BIGINT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL,

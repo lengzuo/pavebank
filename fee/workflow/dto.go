@@ -4,14 +4,23 @@ import (
 	"time"
 
 	"encore.app/fee/model"
+	"encore.app/fee/utils"
 )
 
+type RecurringPolicy struct {
+	Amount      int64
+	Interval    utils.Duration
+	Description string
+}
+
 type BillLifecycleWorkflowRequest struct {
-	BillID           string
-	PolicyType       model.PolicyType
-	BillingPeriodEnd time.Time
-	PreviousState    *BillState
-	SubscriptionFee  *model.LineItemSummary
+	BillID            string
+	PolicyType        model.PolicyType
+	BilingPeriodStart time.Time
+	BillingPeriodEnd  time.Time
+	Currency          string
+	Recurring         RecurringPolicy
+	PreviousState     *BillState
 }
 
 type BillClosedPostProcessWorkflowRequest struct {
@@ -20,7 +29,6 @@ type BillClosedPostProcessWorkflowRequest struct {
 type AddLineItemSignalRequest struct {
 	LineItemID string
 	Amount     int64
-	Currency   model.Currency
 	BillID     string
 	Metadata   *model.LineItemMetadata
 }
@@ -52,11 +60,13 @@ type LineItem struct {
 }
 
 type BillResponse struct {
-	BillID       string         `json:"bill_id"`
-	Status       string         `json:"status"`
-	PolicyType   string         `json:"policy_type"`
-	CreatedAt    time.Time      `json:"created_at"`
-	ClosedAt     *time.Time     `json:"closed_at,omitempty"`
-	TotalCharges []TotalSummary `json:"total_charges"`
-	LineItems    []LineItem     `json:"line_items"`
+	BillID        string     `json:"bill_id"`
+	Status        string     `json:"status"`
+	PolicyType    string     `json:"policy_type"`
+	CreatedAt     time.Time  `json:"created_at"`
+	ClosedAt      *time.Time `json:"closed_at,omitempty"`
+	Currency      string     `json:"currency"`
+	TotalAmount   int64      `json:"total_amount"`
+	DisplayAmount string     `json:"display_amount"`
+	LineItems     []LineItem `json:"line_items"`
 }
